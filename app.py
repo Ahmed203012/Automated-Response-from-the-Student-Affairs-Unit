@@ -5,7 +5,7 @@ import re
 import google.generativeai as genai
 
 # ==========================================
-# 1. إعدادات الصفحة
+# 1. إعدادات الصفحة والتصميم
 # ==========================================
 st.set_page_config(
     page_title="المجيب الأكاديمي الذكي",
@@ -21,7 +21,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. تهيئة الذكاء الاصطناعي وقراءة اللوائح
+# 2. إعداد مفتاح Gemini
 # ==========================================
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
 
@@ -29,7 +29,6 @@ if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 
 def normalize_arabic(text):
-    """توحيد الحروف لتسهيل فلترة النصوص بسرعة"""
     if not text: return ""
     text = re.sub(r'[\u064B-\u0652]', '', text)
     text = re.sub(r'[إأآا]', 'ا', text)
@@ -39,7 +38,6 @@ def normalize_arabic(text):
 
 @st.cache_resource
 def load_and_index_documents():
-    """قراءة وتقسيم اللوائح إلى فقرات وتخزينها في الذاكرة لسرعة الوصول"""
     paragraphs_db = []
     for file in os.listdir("."):
         if file.endswith(".pdf"):
@@ -48,10 +46,9 @@ def load_and_index_documents():
                 for page in reader.pages:
                     text = page.extract_text()
                     if text:
-                        # تقسيم الصفحة لفقرات
-                        chunks = [p.strip() for p in text.split('\n\n') if len(p.strip()) > 15]
+                        chunks = [p.strip() for p in text.split('\n\n') if len(p.strip()) > 10]
                         if not chunks:
-                            chunks = [p.strip() for p in text.split('\n') if len(p.strip()) > 15]
+                            chunks = [p.strip() for p in text.split('\n') if len(p.strip()) > 10]
                         
                         for chunk in chunks:
                             paragraphs_db.append({
@@ -59,14 +56,12 @@ def load_and_index_documents():
                                 'clean': normalize_arabic(chunk)
                             })
             except Exception as e:
-                print(f"Error loading {file}: {e}")
+                print(f"Error reading PDF: {e}")
     return paragraphs_db
 
-# تحميل الفهرس مرة واحدة فقط عند إقلاع التطبيق
 indexed_db = load_and_index_documents()
 
 def get_relevant_context(query, db):
-    """فلترة الفقرات ذات الصلة فقط لتقليل حجم البيانات المرسلة للـ AI"""
     clean_query = normalize_arabic(query)
     keywords = [w for w in clean_query.split() if len(w) > 2 and w not in ['ماهي', 'ما هي', 'كم', 'متى', 'كيف', 'عن', 'في', 'من']]
     
@@ -77,27 +72,23 @@ def get_relevant_context(query, db):
             scored.append((score, item['original']))
             
     scored.sort(key=lambda x: x[0], reverse=True)
-    # أخذ أفضل فقرتين فقط
-    best_chunks = [item[1] for item in scored[:2]]
+    best_chunks = [item[1] for item in scored[:3]]
     return "\n---\n".join(best_chunks) if best_chunks else ""
 
 # ==========================================
-# 3. دالة توليد الإجابة السريعة (Streaming)
+# 3. استدعاء Gemini مع التوافقية وإظهار الأخطاء
 # ==========================================
-def stream_direct_answer(query, db):
+def generate_direct_answer(query, db):
     if not GEMINI_API_KEY:
-        yield "⚠️ يرجى إضافة مفتاح GEMINI_API_KEY في Streamlit Secrets."
-        return
+        return "⚠️ لم يتم العثور على `GEMINI_API_KEY` في Streamlit Secrets. يرجى إضافته أولاً."
 
-    # فلترة سريعة للنص المطلوب فقط
     relevant_context = get_relevant_context(query, db)
     
     if not relevant_context:
-        yield "لم أجد نصاً صريحاً يتعلق باستفسارك في اللوائح المعتمدة."
-        return
+        return "لم أجد نصاً صريحاً يتعلق باستفسارك في اللوائح المرفقة."
 
     prompt = f"""
-    أنت مساعد أكاديمي ذكي. أجب على سؤال الطالب بناءً على النص اقتطافياً ومباشرة.
+    أنت مساعد أكاديمي ذكي. أجب على سؤال الطالب بناءً على النص المقتطع التالي فقط.
 
     النص المقتطع من اللائحة:
     \"\"\"
@@ -107,22 +98,26 @@ def stream_direct_answer(query, db):
     سؤال الطالب: "{query}"
 
     التعليمات:
-    - أجب بأسلوب مباشر ومقتضب جداً (في سطر أو سطرين فقط).
-    - اذكر المهل والأرقام والشروط فوراً دون مقدمات أو إطالة.
+    1. أجب بأسلوب مباشر ومقتضب جداً (في سطر أو سطرين فقط).
+    2. اذكر المهل والشروط والأرقام فوراً.
+    3. لا تطبع النص الكامل للائحة.
     """
 
+    # تجربة النموذج الرئيسي، وفي حال فشله استخدام النموذج البديل
     try:
         model = genai.GenerativeModel('gemini-1.5-flash')
-        # تفعيل البث المباشر للإجابة فوراً
-        response = model.generate_content(prompt, stream=True)
-        for chunk in response:
-            if chunk.text:
-                yield chunk.text
-    except Exception as e:
-        yield f"حدث خطأ: {str(e)}"
+        response = model.generate_content(prompt)
+        return response.text
+    except Exception as e1:
+        try:
+            model = genai.GenerativeModel('gemini-pro')
+            response = model.generate_content(prompt)
+            return response.text
+        except Exception as e2:
+            return f"❌ حدث خطأ أثناء الاتصال بالذكاء الاصطناعي:\n\n`{str(e1)}`"
 
 # ==========================================
-# 4. الواجهة الرئيسية
+# 4. واجهة التطبيق
 # ==========================================
 st.title("🎓 المجيب الأكاديمي الذكي")
 st.write("أهلاً بك! اكتب استفسارك وسيجيبك النظام فوراً وبشكل مباشر.")
@@ -131,19 +126,20 @@ st.divider()
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# عرض المحادثات
+# عرض السجل
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# استقبال السؤال والكتابة الفورية
+# استقبال سؤال الطالب
 if prompt := st.chat_input("اكتب استفسارك هنا (مثال: ما هي مهلة تقديم عذر الوفاة؟)..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        # كتابة الرد تدريجياً فوراً على الشاشة
-        full_response = st.write_stream(stream_direct_answer(prompt, indexed_db))
+        with st.spinner("جاري استخراج الإجابة..."):
+            answer = generate_direct_answer(prompt, indexed_db)
+            st.markdown(answer)
     
-    st.session_state.messages.append({"role": "assistant", "content": full_response})
+    st.session_state.messages.append({"role": "assistant", "content": answer})
