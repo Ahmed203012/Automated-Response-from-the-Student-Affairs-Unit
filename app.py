@@ -1,128 +1,107 @@
 import streamlit as st
-import re
-import pandas as pd
-from datetime import datetime
+import pypdf # لتشغيل قراءة ملفات PDF
 
 # ==========================================
 # 1. إعدادات الصفحة والتصميم
 # ==========================================
 st.set_page_config(
-    page_title="نظام استفسارات الطلاب",
-    page_icon="🎓",
-    layout="centered",
-    initial_sidebar_state="expanded"
+    page_title="المساعد الآلي لللوائح الأكاديمية",
+    page_icon="🤖",
+    layout="centered"
 )
 
-# تخصيص الاتجاه والواجهة لدعم اللغة العربية (RTL)
 st.markdown("""
     <style>
-    .main {
-        direction: rtl;
-        text-align: right;
-    }
-    div[data-baseweb="select"] {
-        direction: rtl;
-    }
-    .stButton>button {
-        width: 100%;
-        background-color: #0056b3;
-        color: white;
-        border-radius: 8px;
-        height: 3em;
-        font-size: 16px;
-    }
+    .main { direction: rtl; text-align: right; }
+    .stTextInput input { text-align: right; }
     </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. دوال التحقق والتحقق من البيانات
+# 2. إدارة اللوائح والنصوص المرفقة
 # ==========================================
-def validate_email(email):
-    """التحقق من صحة صيغة البريد الإلكتروني"""
-    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-    return re.match(pattern, email) is not None
+if "regulations_text" not in st.session_state:
+    # يمكنك كتابة اللوائح الافتراضية هنا مباشرة بين العلامات
+    st.session_state["regulations_text"] = """
+    مادة (1): الحضور والغياب: يتوجب على الطالب تقديم عذر غياب مقبول خلال 5 أيام عمل من تاريخ الانقطاع.
+    مادة (2): إعادة التصحيح: يتم تقديم طلب إعادة تصحيح الاختبار عبر البوابة خلال أسبوعين من إعلان النتائج.
+    مادة (3): الإنسحاب من المقرر: يحق للطالب الإنسحاب من المقرر قبل الأسبوع العاشر من الفصل الدراسي.
+    """
 
-def save_inquiry(student_id, name, email, category, message):
-    """حفظ الاستفسار في القائمة المحلية أو قاعدة البيانات"""
-    new_data = {
-        "تاريخ الطلب": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "الرقم الجامعي": student_id,
-        "اسم الطالب": name,
-        "البريد الإلكتروني": email,
-        "نوع الاستفسار": category,
-        "نص الاستفسار": message,
-        "الحالة": "قيد المراجعة"
-    }
-    if "inquiries_db" not in st.session_state:
-        st.session_state["inquiries_db"] = []
-    st.session_state["inquiries_db"].append(new_data)
+def extract_text_from_pdf(uploaded_file):
+    """استخراج النصوص من ملفات PDF"""
+    pdf_reader = pypdf.PdfReader(uploaded_file)
+    text = ""
+    for page in pdf_reader.pages:
+        text += page.extract_text() or ""
+    return text
+
+def find_auto_answer(query, context):
+    """البحث في نصوص اللوائح وإرجاع الإجابة المناسبة"""
+    if not query.strip():
+        return "يرجى كتابة استفسارك أولاً."
+    
+    lines = context.split('\n')
+    matched_lines = []
+    query_words = [w for w in query.split() if len(w) > 2]
+
+    for line in lines:
+        if any(word in line for word in query_words):
+            if line.strip():
+                matched_lines.append(line.strip())
+
+    if matched_lines:
+        return "📌 **بناءً على اللوائح الأكاديمية المعتمدة:**\n\n" + "\n\n".join(matched_lines)
+    else:
+        return "لم أجد نصاً صريحاً يتعلق باستفسارك في اللوائح المرفقة. يرجى مراجعة إدارة الشؤون الأكاديمية."
 
 # ==========================================
-# 3. الهيكل الرئيسي للتطبيق
+# 3. القائمة الجانبية لرفع اللوائح
 # ==========================================
-def main():
-    st.title("🎓 بوابة استفسارات الطلاب الأكاديمية")
-    st.write("أهلاً بك! يمكنك تقديم استفسارك أو طلبك الأكاديمي من خلال النموذج أدناه.")
-    st.divider()
+st.sidebar.title("⚙️ إدارة اللوائح والملفات")
+uploaded_files = st.sidebar.file_uploader(
+    "قم برفع ملفات اللوائح (PDF أو TXT):", 
+    type=["pdf", "txt"], 
+    accept_multiple_files=True
+)
 
-    # القائمة الجانبية (Sidebar)
-    st.sidebar.title("لوحة التحكم")
-    page = st.sidebar.radio("اختر الوجهة:", ["تقديم استفسار جديد", "متابعة حالة طلب"])
+if uploaded_files:
+    combined_text = ""
+    for file in uploaded_files:
+        if file.type == "text/plain":
+            combined_text += file.read().decode("utf-8") + "\n"
+        elif file.type == "application/pdf":
+            combined_text += extract_text_from_pdf(file) + "\n"
+    st.session_state["regulations_text"] = combined_text
+    st.sidebar.success("✅ تم تحميل اللوائح بنجاح!")
 
-    if page == "تقديم استفسار جديد":
-        st.subheader("📝 نموذج تقديم طلب / استفسار")
-        
-        with st.form("student_inquiry_form", clear_on_submit=True):
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                student_name = st.text_input("اسم الطالب الثلاثي *")
-            with col2:
-                student_id = st.text_input("الرقم الجامعي / الأكاديمي *")
+# ==========================================
+# 4. الواجهة الرئيسية واستقبال الاستفسارات
+# ==========================================
+st.title("🤖 المجيب الآلي لللوائح والاستفسارات")
+st.write("أهلاً بك! اكتب استفسارك الأكاديمي أدناه وسيقوم النظام بالرد عليك فوراً طبقاً لللوائح المرفقة.")
 
-            student_email = st.text_input("البريد الإلكتروني *")
-            
-            inquiry_type = st.selectbox(
-                "تصنيف الاستفسار *",
-                [
-                    "استفسار عن الشؤون الأكاديمية والجدول",
-                    "طلب إعادة تصحيح / مراجعة اختبار",
-                    "استفسار عن السجل الأكاديمي والدرجات",
-                    "تقديم أعذار غياب",
-                    "عام / أخرى"
-                ]
-            )
+st.divider()
 
-            inquiry_text = st.text_area("تفاصيل الاستفسار أو الطلب *", height=150)
-            
-            submit_button = st.form_submit_button("إرسال الطلب")
+# سِجل المحادثة
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
-        if submit_button:
-            # التحقق من إدخال جميع الحقول المطلوبة
-            if not student_name or not student_id or not student_email or not inquiry_text:
-                st.error("⚠️ يرجى ملء كافة الحقول المطلوبة قبل الإرسال.")
-            elif not validate_email(student_email):
-                st.error("❌ البريد الإلكتروني غير صحيح، يرجى إدخال بريد إلكتروني فعال.")
-            else:
-                # حفظ الطلب
-                save_inquiry(student_id, student_name, student_email, inquiry_type, inquiry_text)
-                st.success("✅ تم إرسال استفسارك بنجاح! سيتم التواصل معك عبر البريد الإلكتروني المدخل.")
-                st.balloons()
+# عرض المحادثات السابقة
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
 
-    elif page == "متابعة حالة طلب":
-        st.subheader("🔍 الاستعلام عن حالة الطلب")
-        search_id = st.text_input("أدخل الرقم الجامعي لمتابعة طلباتك:")
-        
-        if st.button("بحث"):
-            if "inquiries_db" in st.session_state and st.session_state["inquiries_db"]:
-                user_requests = [req for req in st.session_state["inquiries_db"] if req["الرقم الجامعي"] == search_id]
-                if user_requests:
-                    df = pd.DataFrame(user_requests)
-                    st.dataframe(df, use_container_state_dict=True)
-                else:
-                    st.warning("لم يتم العثور على أي طلبات مرتبطة بهذا الرقم الجامعي.")
-            else:
-                st.info("لا توجد طلبات مسجلة في النظام حالياً.")
+# استقبال مدخلات الطالب والتجاوب الفوري
+if prompt := st.chat_input("اكتب استفسارك هنا (مثال: ما هي شروط إعادة التصحيح؟)..."):
+    # عرض سؤال الطالب
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
 
-if __name__ == "__main__":
-    main()
+    # توليد وإظهار الرد الفوري
+    response = find_auto_answer(prompt, st.session_state["regulations_text"])
+    
+    with st.chat_message("assistant"):
+        st.markdown(response)
+    st.session_state.messages.append({"role": "assistant", "content": response})
