@@ -20,93 +20,90 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. تهيئة الذكاء الاصطناعي واستخراج النص
+# 2. تهيئة الذكاء الاصطناعي واستخراج النص (مرة واحدة فقط)
 # ==========================================
-# قم بوضع مفتاح Gemini API هنا أو عبر Streamlit Secrets
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
 
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 
-def extract_text_from_pdf(file_path):
-    """استخراج النص الكامل من ملف الـ PDF"""
-    text = ""
-    try:
-        reader = pypdf.PdfReader(file_path)
-        for page in reader.pages:
-            extracted = page.extract_text()
-            if extracted:
-                text += extracted + "\n"
-    except Exception as e:
-        print(f"خطأ في قراءة الملف {file_path}: {e}")
-    return text
-
-@st.cache_data
-def load_all_regulations():
-    """تحميل كل ملفات PDF المرفقة في المشروع"""
+@st.cache_resource
+def load_and_cache_pdf_text():
+    """قراءة كل ملفات الـ PDF وتخزينها في الذاكرة مرة واحدة فقط عند تشغيل التطبيق"""
     combined_text = ""
     for file in os.listdir("."):
         if file.endswith(".pdf"):
-            combined_text += f"\n--- محتوى ملف: {file} ---\n"
-            combined_text += extract_text_from_pdf(file)
+            try:
+                reader = pypdf.PdfReader(file)
+                for page in reader.pages:
+                    text = page.extract_text()
+                    if text:
+                        combined_text += text + "\n"
+            except Exception as e:
+                print(f"Error reading {file}: {e}")
     return combined_text
 
-def ask_ai_about_regulations(query, context):
-    """إرسال السؤال والنص للذكاء الاصطناعي لاستخراج الإجابة المباشرة"""
+# تحميل اللوائح مرة واحدة فقط في الذاكرة لتسريع الأداء لـ 0 ثانية
+regulations_context = load_and_cache_pdf_text()
+
+# ==========================================
+# 3. دالة توليد الإجابة المباشرة (Streaming like ChatGPT)
+# ==========================================
+def stream_ai_response(query, context):
     if not GEMINI_API_KEY:
-        return "⚠️ يرجى إضافة مفتاح GEMINI_API_KEY في إعدادات التطبيق لتفعيل المجيب الذكي."
-    
+        yield "⚠️ يرجى إدخال مفتاح GEMINI_API_KEY في إعدادات Secrets لتشغيل المجيب."
+        return
+
     prompt = f"""
-    أنت مساعد أكاديمي ذكي لشؤون الطلاب. مهمتك هي الإجابة على سؤال الطالب استناداً فقط إلى اللوائح والأنظمة المرفقة أدناه.
+    أنت مساعد أكاديمي ذكي لشؤون الطلاب. أجب على سؤال الطالب استناداً إلى اللوائح المرفقة أدناه فقط.
     
-    اللوائح والأنظمة المعتمدة:
+    اللوائح:
     \"\"\"
     {context}
     \"\"\"
     
-    سؤال الطالب:
-    "{query}"
+    سؤال الطالب: "{query}"
     
     التعليمات:
-    1. أجب بدقة ووضوح وبأسلوب سلس ومباشر بناءً على اللوائح أعلاه.
-    2. اذكر المدة أو الشرط بالتفصيل (مثل: عدد الأيام، الشروط المطلوب تقديمها).
-    3. إذا لم تجد إجابة للسؤال في اللوائح المرفقة نهائياً، أجب بـ: "لم أجد نصاً صريحاً يتعلق باستفسارك في اللوائح المرفقة. يرجى مراجعة إدارة الشؤون الأكاديمية."
+    - أجب بشكل مباشر ودقيق وسريع جداً.
+    - اذكر المهل والأيام المحددة صراحة (مثل: أسبوع عمل، 5 أيام).
+    - إذا لم تكن الإجابة موجودة باللوائح، قل: "لم أجد نصاً صريحاً يتعلق باستفسارك في اللوائح المرفقة."
     """
-    
+
     try:
         model = genai.GenerativeModel('gemini-1.5-flash')
-        response = model.generate_content(prompt)
-        return response.text
+        # تفعيل خاصية الكتابة الفورية التدريجية
+        response = model.generate_content(prompt, stream=True)
+        for chunk in response:
+            if chunk.text:
+                yield chunk.text
     except Exception as e:
-        return f"حدث خطأ أثناء الاتصال بالمجيب الآلي: {str(e)}"
+        yield f"حدث خطأ: {str(e)}"
 
 # ==========================================
-# 3. واجهة التطبيق
+# 4. الواجهة الرئيسية وشات المحادثة
 # ==========================================
-regulations_context = load_all_regulations()
-
-st.sidebar.title("⚙️ إدارة اللوائح")
-st.sidebar.info("📚 يتم قراءة اللوائح والأعذار المرفقة في المشروع تلقائياً بواسطة الذكاء الاصطناعي.")
-
 st.title("🤖 المجيب الآلي لللوائح والاستفسارات")
-st.write("أهلاً بك! اكتب استفسارك الأكاديمي وسيجيبك النظام فوراً من واقع اللوائح المعتمدة.")
+st.write("أهلاً بك! اكتب استفسارك الأكاديمي وسيجيبك النظام فوراً.")
 st.divider()
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
+# عرض المحادثات السابقة
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
+# استقبال السؤال والكتابة الفورية
 if prompt := st.chat_input("اكتب استفسارك هنا (مثال: ما هي مهلة تقديم عذر الوفاة؟)..."):
+    # عرض سؤال الطالب
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    with st.spinner("جاري مراجعة اللوائح والإجابة..."):
-        ai_response = ask_ai_about_regulations(prompt, regulations_context)
-
+    # إنشاء رد المساعد والكتابة الحية (Stream)
     with st.chat_message("assistant"):
-        st.markdown(ai_response)
-    st.session_state.messages.append({"role": "assistant", "content": ai_response})
+        response_placeholder = st.write_stream(stream_ai_response(prompt, regulations_context))
+        
+    st.session_state.messages.append({"role": "assistant", "content": response_placeholder})
