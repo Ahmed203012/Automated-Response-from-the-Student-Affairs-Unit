@@ -1,14 +1,14 @@
 import streamlit as st
 import pypdf
 import os
-import re
+import google.generativeai as genai
 
 # ==========================================
-# 1. إعدادات الصفحة والتصميم
+# 1. إعدادات الصفحة
 # ==========================================
 st.set_page_config(
-    page_title="المجيب الآلي لللوائح الأكاديمية",
-    page_icon="🤖",
+    page_title="المجيب الأكاديمي الذكي",
+    page_icon="🎓",
     layout="centered"
 )
 
@@ -20,107 +20,88 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. معالجة النصوص واللوائح
+# 2. قراءة اللوائح وتجهيز الذكاء الاصطناعي
 # ==========================================
-def normalize_arabic(text):
-    """تنظيف وتوحيد الحروف العربية لتسهيل البحث الشامل"""
-    if not text:
-        return ""
-    text = re.sub(r'[\u064B-\u0652]', '', text)  # إزالة التشكيل
-    text = re.sub(r'[إأآا]', 'ا', text)          # توحيد الألف
-    text = re.sub(r'ة', 'ه', text)               # توحيد التاء المربوطة
-    text = re.sub(r'ى', 'ي', text)               # توحيد الألف المقصورة
-    return text.lower()
+# استدعاء مفتاح API من إعدادات Streamlit Secrets
+GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
+
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
 
 @st.cache_data
 def load_all_documents():
     """قراءة كل ملفات الـ PDF وتخزينها في الذاكرة لتكون سرعة الرد فائقة"""
-    all_chunks = []
+    combined_text = ""
     for file in os.listdir("."):
         if file.endswith(".pdf"):
             try:
                 reader = pypdf.PdfReader(file)
-                for page_num, page in enumerate(reader.pages):
+                for page in reader.pages:
                     text = page.extract_text()
                     if text:
-                        # تقسيم الصفحة إلى فقرات منظمة
-                        paragraphs = [p.strip() for p in text.split('\n\n') if len(p.strip()) > 10]
-                        if not paragraphs:
-                            paragraphs = [p.strip() for p in text.split('\n') if len(p.strip()) > 10]
-                        
-                        for p in paragraphs:
-                            all_chunks.append({
-                                'original': p,
-                                'clean': normalize_arabic(p)
-                            })
+                        combined_text += text + "\n"
             except Exception as e:
                 print(f"Error loading {file}: {e}")
-    return all_chunks
+    return combined_text
 
-# تحميل اللوائح مرة واحدة فقط في الذاكرة
-chunks_db = load_all_documents()
-
-# ==========================================
-# 3. محرك البحث السريع والإجابة المباشرة
-# ==========================================
-def find_best_answers(query, db):
-    if not query.strip():
-        return "يرجى كتابة استفسارك أولاً."
-
-    clean_query = normalize_arabic(query)
-    # استخراج الكلمات المفتاحية
-    keywords = [word for word in clean_query.split() if len(word) > 2 and word not in ['ما هي', 'ماهو', 'كم', 'متى', 'كيف', 'عن', 'في', 'من']]
-    
-    if not keywords:
-        keywords = clean_query.split()
-
-    scored_results = []
-    for chunk in db:
-        score = 0
-        for kw in keywords:
-            if kw in chunk['clean']:
-                score += 1
-        if score > 0:
-            scored_results.append((score, chunk['original']))
-
-    # ترتيب النتائج من الأفضل للأقل
-    scored_results.sort(key=lambda x: x[0], reverse=True)
-
-    if scored_results:
-        # دمج أفضل نتيجة أو نتيجتين
-        top_answers = list(dict.fromkeys([item[1] for item in scored_results[:2]]))
-        formatted_response = "📌 **بناءً على اللوائح التنفيذية المعتمدة:**\n\n"
-        formatted_response += "\n\n---\n\n".join(top_answers)
-        return formatted_response
-    else:
-        return "لم أجد نصاً صريحاً يتعلق باستفسارك في اللوائح المرفقة. يرجى مراجعة إدارة الشؤون الأكاديمية."
+regulations_context = load_all_documents()
 
 # ==========================================
-# 4. واجهة المحادثة الرئيسية
+# 3. محرك الاستخراج الذكي للإجابة المباشرة
 # ==========================================
-st.title("🤖 المجيب الآلي لللوائح والاستفسارات")
-st.write("أهلاً بك! اكتب استفسارك الأكاديمي وسيجيبك النظام فوراً.")
+def get_direct_answer(query, context):
+    if not GEMINI_API_KEY:
+        return "⚠️ لم يتم ضبط مفتاح GEMINI_API_KEY في إعدادات Secrets."
+
+    prompt = f"""
+    أنت مساعد أكاديمي موجه للطلاب. مهمتك هي استخراج الإجابة المباشرة والمحددة فقط لسؤال الطالب بناءً على اللائحة المرفقة.
+
+    اللائحة الأكاديمية:
+    \"\"\"
+    {context}
+    \"\"\"
+
+    سؤال الطالب: "{query}"
+
+    شروط الإجابة الصارمة:
+    1. أجب في سطر أو سطرين فقط بالإجابة المباشرة والواضحة للسؤال.
+    2. لا تطبع اللائحة كاملة ولا تجلب الفقرات التي لا تعني السؤال.
+    3. اذكر الأرقام والمدد الزمنية بدقة كما وردت (مثال: أسبوع عمل من تاريخ الوفاة، 5 أيام).
+    4. إذا لم يذكر السؤال في اللائحة نهائياً، أجب فقط بـ: "لم أجد نصاً صريحاً يتعلق باستفسارك في اللوائح المعتمدة."
+    """
+
+    try:
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        response = model.generate_content(prompt)
+        return response.text.strip()
+    except Exception as e:
+        return f"حدث خطأ أثناء معالجة الطلب: {str(e)}"
+
+# ==========================================
+# 4. واجهة المحادثة
+# ==========================================
+st.title("🎓 المجيب الأكاديمي الذكي")
+st.write("أهلاً بك! اكتب استفسارك وسيقوم النظام بإجابتك فوراً بأسلوب مباشر.")
 st.divider()
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# عرض سوابق المحادثة
+# عرض المحادثات السابقة
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# استقبال سؤال الطالب
+# استقبال السؤال وإعطاء إجابة مقتضبة مباشرة
 if prompt := st.chat_input("اكتب استفسارك هنا (مثال: ما هي مهلة تقديم عذر الوفاة؟)..."):
-    # 1. عرض سؤال الطالب
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # 2. إيجاد الإجابة الفورية وعرضها
-    answer = find_best_answers(prompt, chunks_db)
+    with st.spinner("جاري استخراج الإجابة..."):
+        direct_answer = get_direct_answer(prompt, regulations_context)
 
     with st.chat_message("assistant"):
-        st.markdown(answer)
+        st.markdown(direct_answer)
     
-    st.session_state.messages.append({"role": "assistant", "content": answer})
+    st.session_state.messages.append({"role": "assistant", "content": direct_answer})
