@@ -1,6 +1,7 @@
 import streamlit as st
 import pypdf
 import os
+import re
 import google.generativeai as genai
 
 # ==========================================
@@ -20,18 +21,26 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. قراءة اللوائح وتجهيز الذكاء الاصطناعي
+# 2. تهيئة الذكاء الاصطناعي وقراءة اللوائح
 # ==========================================
-# استدعاء مفتاح API من إعدادات Streamlit Secrets
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
 
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 
-@st.cache_data
-def load_all_documents():
-    """قراءة كل ملفات الـ PDF وتخزينها في الذاكرة لتكون سرعة الرد فائقة"""
-    combined_text = ""
+def normalize_arabic(text):
+    """توحيد الحروف لتسهيل فلترة النصوص بسرعة"""
+    if not text: return ""
+    text = re.sub(r'[\u064B-\u0652]', '', text)
+    text = re.sub(r'[إأآا]', 'ا', text)
+    text = re.sub(r'ة', 'ه', text)
+    text = re.sub(r'ى', 'ي', text)
+    return text.lower()
+
+@st.cache_resource
+def load_and_index_documents():
+    """قراءة وتقسيم اللوائح إلى فقرات وتخزينها في الذاكرة لسرعة الوصول"""
+    paragraphs_db = []
     for file in os.listdir("."):
         if file.endswith(".pdf"):
             try:
@@ -39,69 +48,102 @@ def load_all_documents():
                 for page in reader.pages:
                     text = page.extract_text()
                     if text:
-                        combined_text += text + "\n"
+                        # تقسيم الصفحة لفقرات
+                        chunks = [p.strip() for p in text.split('\n\n') if len(p.strip()) > 15]
+                        if not chunks:
+                            chunks = [p.strip() for p in text.split('\n') if len(p.strip()) > 15]
+                        
+                        for chunk in chunks:
+                            paragraphs_db.append({
+                                'original': chunk,
+                                'clean': normalize_arabic(chunk)
+                            })
             except Exception as e:
                 print(f"Error loading {file}: {e}")
-    return combined_text
+    return paragraphs_db
 
-regulations_context = load_all_documents()
+# تحميل الفهرس مرة واحدة فقط عند إقلاع التطبيق
+indexed_db = load_and_index_documents()
+
+def get_relevant_context(query, db):
+    """فلترة الفقرات ذات الصلة فقط لتقليل حجم البيانات المرسلة للـ AI"""
+    clean_query = normalize_arabic(query)
+    keywords = [w for w in clean_query.split() if len(w) > 2 and w not in ['ماهي', 'ما هي', 'كم', 'متى', 'كيف', 'عن', 'في', 'من']]
+    
+    scored = []
+    for item in db:
+        score = sum(1 for kw in keywords if kw in item['clean'])
+        if score > 0:
+            scored.append((score, item['original']))
+            
+    scored.sort(key=lambda x: x[0], reverse=True)
+    # أخذ أفضل فقرتين فقط
+    best_chunks = [item[1] for item in scored[:2]]
+    return "\n---\n".join(best_chunks) if best_chunks else ""
 
 # ==========================================
-# 3. محرك الاستخراج الذكي للإجابة المباشرة
+# 3. دالة توليد الإجابة السريعة (Streaming)
 # ==========================================
-def get_direct_answer(query, context):
+def stream_direct_answer(query, db):
     if not GEMINI_API_KEY:
-        return "⚠️ لم يتم ضبط مفتاح GEMINI_API_KEY في إعدادات Secrets."
+        yield "⚠️ يرجى إضافة مفتاح GEMINI_API_KEY في Streamlit Secrets."
+        return
+
+    # فلترة سريعة للنص المطلوب فقط
+    relevant_context = get_relevant_context(query, db)
+    
+    if not relevant_context:
+        yield "لم أجد نصاً صريحاً يتعلق باستفسارك في اللوائح المعتمدة."
+        return
 
     prompt = f"""
-    أنت مساعد أكاديمي موجه للطلاب. مهمتك هي استخراج الإجابة المباشرة والمحددة فقط لسؤال الطالب بناءً على اللائحة المرفقة.
+    أنت مساعد أكاديمي ذكي. أجب على سؤال الطالب بناءً على النص اقتطافياً ومباشرة.
 
-    اللائحة الأكاديمية:
+    النص المقتطع من اللائحة:
     \"\"\"
-    {context}
+    {relevant_context}
     \"\"\"
 
     سؤال الطالب: "{query}"
 
-    شروط الإجابة الصارمة:
-    1. أجب في سطر أو سطرين فقط بالإجابة المباشرة والواضحة للسؤال.
-    2. لا تطبع اللائحة كاملة ولا تجلب الفقرات التي لا تعني السؤال.
-    3. اذكر الأرقام والمدد الزمنية بدقة كما وردت (مثال: أسبوع عمل من تاريخ الوفاة، 5 أيام).
-    4. إذا لم يذكر السؤال في اللائحة نهائياً، أجب فقط بـ: "لم أجد نصاً صريحاً يتعلق باستفسارك في اللوائح المعتمدة."
+    التعليمات:
+    - أجب بأسلوب مباشر ومقتضب جداً (في سطر أو سطرين فقط).
+    - اذكر المهل والأرقام والشروط فوراً دون مقدمات أو إطالة.
     """
 
     try:
         model = genai.GenerativeModel('gemini-1.5-flash')
-        response = model.generate_content(prompt)
-        return response.text.strip()
+        # تفعيل البث المباشر للإجابة فوراً
+        response = model.generate_content(prompt, stream=True)
+        for chunk in response:
+            if chunk.text:
+                yield chunk.text
     except Exception as e:
-        return f"حدث خطأ أثناء معالجة الطلب: {str(e)}"
+        yield f"حدث خطأ: {str(e)}"
 
 # ==========================================
-# 4. واجهة المحادثة
+# 4. الواجهة الرئيسية
 # ==========================================
 st.title("🎓 المجيب الأكاديمي الذكي")
-st.write("أهلاً بك! اكتب استفسارك وسيقوم النظام بإجابتك فوراً بأسلوب مباشر.")
+st.write("أهلاً بك! اكتب استفسارك وسيجيبك النظام فوراً وبشكل مباشر.")
 st.divider()
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# عرض المحادثات السابقة
+# عرض المحادثات
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# استقبال السؤال وإعطاء إجابة مقتضبة مباشرة
+# استقبال السؤال والكتابة الفورية
 if prompt := st.chat_input("اكتب استفسارك هنا (مثال: ما هي مهلة تقديم عذر الوفاة؟)..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    with st.spinner("جاري استخراج الإجابة..."):
-        direct_answer = get_direct_answer(prompt, regulations_context)
-
     with st.chat_message("assistant"):
-        st.markdown(direct_answer)
+        # كتابة الرد تدريجياً فوراً على الشاشة
+        full_response = st.write_stream(stream_direct_answer(prompt, indexed_db))
     
-    st.session_state.messages.append({"role": "assistant", "content": direct_answer})
+    st.session_state.messages.append({"role": "assistant", "content": full_response})
