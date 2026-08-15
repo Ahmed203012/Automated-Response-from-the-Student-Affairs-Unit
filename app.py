@@ -73,7 +73,7 @@ def get_relevant_context(query, db):
     return "\n---\n".join(best_chunks) if best_chunks else ""
 
 # ==========================================
-# 3. استدعاء الموديل (كود AI Studio المدمج)
+# 3. محرك الاستجابة الذكي
 # ==========================================
 def generate_direct_answer(query, db):
     if not GEMINI_API_KEY:
@@ -100,18 +100,27 @@ def generate_direct_answer(query, db):
     3. لا تطبع النص الكامل للائحة.
     """
 
-    try:
-        # تهيئة العميل باستخدام المفتاح المخزن في Secrets
-        client = genai.Client(api_key=GEMINI_API_KEY)
-        
-        # استدعاء النموذج القياسي المستقر
-        response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=prompt,
-        )
-        return response.text
-    except Exception as e:
-        return f"❌ خطأ أثناء الاتصال بالنظام:\n\n`{str(e)}`"
+    client = genai.Client(api_key=GEMINI_API_KEY)
+
+    # إضافة البادئة models/ المعتمدة في SDK
+    candidate_models = [
+        'models/gemini-1.5-flash',
+        'models/gemini-1.5-pro'
+    ]
+
+    last_error = ""
+    for model_name in candidate_models:
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+            )
+            return response.text
+        except Exception as e:
+            last_error = str(e)
+            continue
+
+    return f"❌ تعذر الاتصال بالنظام. الخطأ:\n\n`{last_error}`"
 
 # ==========================================
 # 4. الواجهة الرئيسية
