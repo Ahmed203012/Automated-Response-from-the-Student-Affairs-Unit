@@ -101,14 +101,24 @@ def generate_direct_answer(query, db):
     """
 
     try:
-      client = genai.Client(api_key=GEMINI_API_KEY)
-    response = client.models.generate_content(
-            model='gemini-1.5-flash',
+        client = genai.Client(api_key=GEMINI_API_KEY)
+        # تجربة الموديل بالمسار الحديث
+        response = client.models.generate_content(
+            model='gemini-2.0-flash',
             contents=prompt,
         )
         return response.text
-    except Exception as e:
-        return f"❌ حدث خطأ أثناء الاتصال بالذكاء الاصطناعي:\n\n`{str(e)}`"
+    except Exception as e1:
+        try:
+            # تجربة الموديل البديل بمسار v1 المعتمد
+            client = genai.Client(api_key=GEMINI_API_KEY)
+            response = client.models.generate_content(
+                model='gemini-1.5-flash',
+                contents=prompt,
+            )
+            return response.text
+        except Exception as e2:
+            return f"❌ حدث خطأ أثناء الاتصال بالذكاء الاصطناعي:\n\n`{str(e1)}`"
 
 # ==========================================
 # 4. الواجهة الرئيسية
