@@ -73,7 +73,7 @@ def get_relevant_context(query, db):
     return "\n---\n".join(best_chunks) if best_chunks else ""
 
 # ==========================================
-# 3. الاتصال المباشر بـ Google Gemini
+# 3. الاتصال المباشر عبر Google API
 # ==========================================
 def generate_direct_answer(query, db):
     if not GEMINI_API_KEY:
@@ -100,26 +100,9 @@ def generate_direct_answer(query, db):
     3. لا تطبع النص الكامل للائحة.
     """
 
-    # جلب قائمة النماذج المتاحة ديناميكياً بدلاً من التخمين
+    # الرابط المباشر للموديل المستقر
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
     headers = {'Content-Type': 'application/json'}
-    list_models_url = f"https://generativelanguage.googleapis.com/v1beta/models?key={GEMINI_API_KEY}"
-    
-    target_model = None
-    try:
-        res = requests.get(list_models_url).json()
-        if 'models' in res:
-            for m in res['models']:
-                if 'generateContent' in m.get('supportedGenerationMethods', []):
-                    target_model = m['name'] # استخدام أول موديل يدعم التوليد
-                    if 'flash' in m['name']: # تفضيل موديل flash إن وجد
-                        break
-    except Exception:
-        pass
-
-    if not target_model:
-        target_model = "models/gemini-1.5-flash"
-
-    url = f"https://generativelanguage.googleapis.com/v1beta/{target_model}:generateContent?key={GEMINI_API_KEY}"
     payload = {
         "contents": [{
             "parts": [{"text": prompt}]
