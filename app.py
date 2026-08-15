@@ -2,7 +2,7 @@ import streamlit as st
 import pypdf
 import os
 import re
-from google import genai
+import google.generativeai as genai
 
 # ==========================================
 # 1. إعدادات الصفحة
@@ -21,9 +21,12 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. تهيئة المفتاح والنصوص
+# 2. تهيئة المفتاح وقراءة اللوائح
 # ==========================================
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
+
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
 
 def normalize_arabic(text):
     if not text: return ""
@@ -73,7 +76,7 @@ def get_relevant_context(query, db):
     return "\n---\n".join(best_chunks) if best_chunks else ""
 
 # ==========================================
-# 3. استدعاء Gemini المحدث والآمن
+# 3. استدعاء الموديل المعتمد والمستقر
 # ==========================================
 def generate_direct_answer(query, db):
     if not GEMINI_API_KEY:
@@ -101,24 +104,11 @@ def generate_direct_answer(query, db):
     """
 
     try:
-        client = genai.Client(api_key=GEMINI_API_KEY)
-        # تجربة الموديل بالمسار الحديث
-        response = client.models.generate_content(
-            model='gemini-2.0-flash',
-            contents=prompt,
-        )
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        response = model.generate_content(prompt)
         return response.text
-    except Exception as e1:
-        try:
-            # تجربة الموديل البديل بمسار v1 المعتمد
-            client = genai.Client(api_key=GEMINI_API_KEY)
-            response = client.models.generate_content(
-                model='gemini-1.5-flash',
-                contents=prompt,
-            )
-            return response.text
-        except Exception as e2:
-            return f"❌ حدث خطأ أثناء الاتصال بالذكاء الاصطناعي:\n\n`{str(e1)}`"
+    except Exception as e:
+        return f"❌ حدث خطأ أثناء الاتصال بالذكاء الاصطناعي:\n\n`{str(e)}`"
 
 # ==========================================
 # 4. الواجهة الرئيسية
