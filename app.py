@@ -2,7 +2,7 @@ import streamlit as st
 import pypdf
 import os
 import re
-from google import genai
+import requests
 
 # ==========================================
 # 1. إعدادات الصفحة والواجهة
@@ -73,7 +73,7 @@ def get_relevant_context(query, db):
     return "\n---\n".join(best_chunks) if best_chunks else ""
 
 # ==========================================
-# 3. محرك الاستجابة الذكي
+# 3. الاتصال المباشر (REST API - v1)
 # ==========================================
 def generate_direct_answer(query, db):
     if not GEMINI_API_KEY:
@@ -100,27 +100,26 @@ def generate_direct_answer(query, db):
     3. لا تطبع النص الكامل للائحة.
     """
 
-    client = genai.Client(api_key=GEMINI_API_KEY)
+    # الرابط المباشر للواجهة القياسية المستقرة v1
+    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+    headers = {'Content-Type': 'application/json'}
+    payload = {
+        "contents": [{
+            "parts": [{"text": prompt}]
+        }]
+    }
 
-    # إضافة البادئة models/ المعتمدة في SDK
-    candidate_models = [
-        'models/gemini-1.5-flash',
-        'models/gemini-1.5-pro'
-    ]
-
-    last_error = ""
-    for model_name in candidate_models:
-        try:
-            response = client.models.generate_content(
-                model=model_name,
-                contents=prompt,
-            )
-            return response.text
-        except Exception as e:
-            last_error = str(e)
-            continue
-
-    return f"❌ تعذر الاتصال بالنظام. الخطأ:\n\n`{last_error}`"
+    try:
+        response = requests.post(url, json=payload, headers=headers)
+        res_json = response.json()
+        
+        if response.status_code == 200:
+            return res_json['candidates'][0]['content']['parts'][0]['text']
+        else:
+            err_msg = res_json.get('error', {}).get('message', str(res_json))
+            return f"❌ خطأ من الخادم ({response.status_code}):\n\n`{err_msg}`"
+    except Exception as e:
+        return f"❌ خطأ في الاتصال الشبكي: `{str(e)}`"
 
 # ==========================================
 # 4. الواجهة الرئيسية
