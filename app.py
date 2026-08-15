@@ -73,7 +73,7 @@ def get_relevant_context(query, db):
     return "\n---\n".join(best_chunks) if best_chunks else ""
 
 # ==========================================
-# 3. محرك الاستجابة الذكي (يختار الموديل المتاح تلقائياً)
+# 3. محرك الاستجابة الذكي (مع المسارات المعيارية models/)
 # ==========================================
 def generate_direct_answer(query, db):
     if not GEMINI_API_KEY:
@@ -102,12 +102,12 @@ def generate_direct_answer(query, db):
 
     client = genai.Client(api_key=GEMINI_API_KEY)
 
-    # قائمة بالنماذج المعتمدة للتجربة التلقائية بالتسلسل
+    # قائمة بالنماذج المعتمدة بالبادئة الرسمية الصحيحة لمكتبة google-genai
     candidate_models = [
-        'gemini-2.5-flash',
-        'gemini-2.0-flash',
-        'gemini-1.5-flash-latest',
-        'gemini-1.5-flash'
+        'models/gemini-1.5-flash',
+        'models/gemini-1.5-flash-latest',
+        'models/gemini-2.0-flash',
+        'models/gemini-2.5-flash'
     ]
 
     last_error = ""
