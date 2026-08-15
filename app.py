@@ -101,7 +101,6 @@ def generate_direct_answer(query, db):
     """
 
     try:
-        # تهيئة المكتبة بالطريقة المباشرة المستقرة
         genai.configure(api_key=GEMINI_API_KEY)
         model = genai.GenerativeModel('gemini-1.5-flash')
         response = model.generate_content(prompt)
