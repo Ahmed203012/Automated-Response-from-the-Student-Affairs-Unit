@@ -2,7 +2,7 @@ import streamlit as st
 import pypdf
 import os
 import re
-import google.generativeai as genai
+from google import genai
 
 # ==========================================
 # 1. إعدادات الصفحة والواجهة
@@ -73,7 +73,7 @@ def get_relevant_context(query, db):
     return "\n---\n".join(best_chunks) if best_chunks else ""
 
 # ==========================================
-# 3. محرك الاستجابة الذكي
+# 3. استدعاء الموديل (كود AI Studio المدمج)
 # ==========================================
 def generate_direct_answer(query, db):
     if not GEMINI_API_KEY:
@@ -101,9 +101,14 @@ def generate_direct_answer(query, db):
     """
 
     try:
-        genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        response = model.generate_content(prompt)
+        # تهيئة العميل باستخدام المفتاح المخزن في Secrets
+        client = genai.Client(api_key=GEMINI_API_KEY)
+        
+        # استدعاء النموذج القياسي المستقر
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt,
+        )
         return response.text
     except Exception as e:
         return f"❌ خطأ أثناء الاتصال بالنظام:\n\n`{str(e)}`"
