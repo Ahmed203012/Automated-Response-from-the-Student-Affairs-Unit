@@ -2,10 +2,10 @@ import streamlit as st
 import pypdf
 import os
 import re
-import google.generativeai as genai
+from google import genai
 
 # ==========================================
-# 1. إعدادات الصفحة
+# 1. إعدادات الصفحة والواجهة
 # ==========================================
 st.set_page_config(
     page_title="المجيب الأكاديمي الذكي",
@@ -21,12 +21,9 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. تهيئة المفتاح وقراءة اللوائح
+# 2. قراءة مفتاح الـ API والملفات
 # ==========================================
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
-
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
 
 def normalize_arabic(text):
     if not text: return ""
@@ -56,7 +53,7 @@ def load_and_index_documents():
                                 'clean': normalize_arabic(chunk)
                             })
             except Exception as e:
-                print(f"Error reading PDF: {e}")
+                print(f"Error reading PDF {file}: {e}")
     return paragraphs_db
 
 indexed_db = load_and_index_documents()
@@ -76,7 +73,7 @@ def get_relevant_context(query, db):
     return "\n---\n".join(best_chunks) if best_chunks else ""
 
 # ==========================================
-# 3. استدعاء الموديل المعتمد والمستقر
+# 3. محرك الاستجابة الذكي (يختار الموديل المتاح تلقائياً)
 # ==========================================
 def generate_direct_answer(query, db):
     if not GEMINI_API_KEY:
@@ -103,12 +100,29 @@ def generate_direct_answer(query, db):
     3. لا تطبع النص الكامل للائحة.
     """
 
-    try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        response = model.generate_content(prompt)
-        return response.text
-    except Exception as e:
-        return f"❌ حدث خطأ أثناء الاتصال بالذكاء الاصطناعي:\n\n`{str(e)}`"
+    client = genai.Client(api_key=GEMINI_API_KEY)
+
+    # قائمة بالنماذج المعتمدة للتجربة التلقائية بالتسلسل
+    candidate_models = [
+        'gemini-2.5-flash',
+        'gemini-2.0-flash',
+        'gemini-1.5-flash-latest',
+        'gemini-1.5-flash'
+    ]
+
+    last_error = ""
+    for model_name in candidate_models:
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+            )
+            return response.text
+        except Exception as e:
+            last_error = str(e)
+            continue
+
+    return f"❌ تعذر الاتصال بجميع النماذج. الخطأ الأخير:\n\n`{last_error}`"
 
 # ==========================================
 # 4. الواجهة الرئيسية
