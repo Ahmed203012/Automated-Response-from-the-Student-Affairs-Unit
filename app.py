@@ -2,10 +2,10 @@ import streamlit as st
 import pypdf
 import os
 import re
-import google.generativeai as genai
+from google import genai
 
 # ==========================================
-# 1. إعدادات الصفحة والتصميم
+# 1. إعدادات الصفحة
 # ==========================================
 st.set_page_config(
     page_title="المجيب الأكاديمي الذكي",
@@ -21,12 +21,9 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. إعداد مفتاح Gemini
+# 2. تهيئة المفتاح والنصوص
 # ==========================================
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
-
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
 
 def normalize_arabic(text):
     if not text: return ""
@@ -76,11 +73,11 @@ def get_relevant_context(query, db):
     return "\n---\n".join(best_chunks) if best_chunks else ""
 
 # ==========================================
-# 3. استدعاء Gemini مع التوافقية وإظهار الأخطاء
+# 3. استدعاء Gemini المحدث والآمن
 # ==========================================
 def generate_direct_answer(query, db):
     if not GEMINI_API_KEY:
-        return "⚠️ لم يتم العثور على `GEMINI_API_KEY` في Streamlit Secrets. يرجى إضافته أولاً."
+        return "⚠️ لم يتم العثور على `GEMINI_API_KEY` في Streamlit Secrets."
 
     relevant_context = get_relevant_context(query, db)
     
@@ -103,21 +100,18 @@ def generate_direct_answer(query, db):
     3. لا تطبع النص الكامل للائحة.
     """
 
-    # تجربة النموذج الرئيسي، وفي حال فشله استخدام النموذج البديل
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        response = model.generate_content(prompt)
+        client = genai.Client(api_key=GEMINI_API_KEY)
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt,
+        )
         return response.text
-    except Exception as e1:
-        try:
-            model = genai.GenerativeModel('gemini-pro')
-            response = model.generate_content(prompt)
-            return response.text
-        except Exception as e2:
-            return f"❌ حدث خطأ أثناء الاتصال بالذكاء الاصطناعي:\n\n`{str(e1)}`"
+    except Exception as e:
+        return f"❌ حدث خطأ أثناء الاتصال بالذكاء الاصطناعي:\n\n`{str(e)}`"
 
 # ==========================================
-# 4. واجهة التطبيق
+# 4. الواجهة الرئيسية
 # ==========================================
 st.title("🎓 المجيب الأكاديمي الذكي")
 st.write("أهلاً بك! اكتب استفسارك وسيجيبك النظام فوراً وبشكل مباشر.")
@@ -126,12 +120,10 @@ st.divider()
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# عرض السجل
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# استقبال سؤال الطالب
 if prompt := st.chat_input("اكتب استفسارك هنا (مثال: ما هي مهلة تقديم عذر الوفاة؟)..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
