@@ -2,7 +2,7 @@ import streamlit as st
 import pypdf
 import os
 import re
-from google import genai
+import google.generativeai as genai
 
 # ==========================================
 # 1. إعدادات الصفحة والواجهة
@@ -100,28 +100,14 @@ def generate_direct_answer(query, db):
     3. لا تطبع النص الكامل للائحة.
     """
 
-    client = genai.Client(api_key=GEMINI_API_KEY)
-
-    # النماذج المستقرة والمتاحة حالياً
-    candidate_models = [
-        'gemini-2.0-flash',
-        'gemini-1.5-flash',
-        'gemini-1.5-pro'
-    ]
-
-    last_error = ""
-    for model_name in candidate_models:
-        try:
-            response = client.models.generate_content(
-                model=model_name,
-                contents=prompt,
-            )
-            return response.text
-        except Exception as e:
-            last_error = str(e)
-            continue
-
-    return f"❌ تعذر الاتصال بجميع النماذج. الخطأ الأخير:\n\n`{last_error}`"
+    try:
+        # تهيئة المكتبة بالطريقة المباشرة المستقرة
+        genai.configure(api_key=GEMINI_API_KEY)
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        response = model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        return f"❌ خطأ أثناء الاتصال بالنظام:\n\n`{str(e)}`"
 
 # ==========================================
 # 4. الواجهة الرئيسية
