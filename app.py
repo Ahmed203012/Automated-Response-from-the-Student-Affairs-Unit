@@ -43,10 +43,8 @@ def load_and_index_documents():
                 for page in reader.pages:
                     text = page.extract_text()
                     if text:
-                        # تقسيم النص بالأسطر المباشرة لدعم ملفات الروابط والأسطر القصيرة
                         lines = [p.strip() for p in text.split('\n') if len(p.strip()) > 3]
                         
-                        # تجميع كل سطرين متتاليين لضمان عدم فصل العنوان عن الرابط
                         for i in range(len(lines)):
                             chunk = lines[i]
                             if i + 1 < len(lines):
@@ -54,7 +52,8 @@ def load_and_index_documents():
                             
                             paragraphs_db.append({
                                 'original': chunk,
-                                'clean': normalize_arabic(chunk)
+                                'clean': normalize_arabic(chunk),
+                                'has_url': 'http' in chunk.lower()
                             })
             except Exception as e:
                 print(f"Error reading PDF {file}: {e}")
@@ -64,16 +63,21 @@ indexed_db = load_and_index_documents()
 
 def get_relevant_context(query, db):
     clean_query = normalize_arabic(query)
-    keywords = [w for w in clean_query.split() if len(w) > 1 and w not in ['ماهي', 'ما هي', 'كم', 'متى', 'كيف', 'عن', 'في', 'من']]
+    keywords = [w for w in clean_query.split() if len(w) > 1 and w not in ['ماهي', 'ما هي', 'كم', 'متى', 'كيف', 'عن', 'في', 'من', 'طريقه', 'طريقة', 'كيفية']]
     
     scored = []
     for item in db:
         score = sum(1 for kw in keywords if kw in item['clean'])
+        
+        # منح أولوية مضاعفة للمستندات التي تحتوي على روابط عند الاستفسار عن التقديم/الروابط
+        if item['has_url'] and any(w in clean_query for w in ['رابط', 'تقديم', 'طريقه', 'طريقة', 'نموذج', 'انشطة', 'انشطه', 'تظلم', 'عذر', 'اعذار']):
+            score += 5
+            
         if score > 0:
             scored.append((score, item['original']))
             
     scored.sort(key=lambda x: x[0], reverse=True)
-    best_chunks = [item[1] for item in scored[:5]]
+    best_chunks = [item[1] for item in scored[:6]]
     return "\n---\n".join(best_chunks) if best_chunks else ""
 
 # ==========================================
@@ -86,12 +90,12 @@ def generate_direct_answer(query, db):
     relevant_context = get_relevant_context(query, db)
     
     if not relevant_context:
-        return "لم أجد نصاً صريحاً يتعلق باستفسارك في اللوائح والروابط المرفقة."
+        return "لم أجد نصاً صريحاً يتعلق باستفسارك في المستندات المرفقة."
 
     prompt = f"""
     أنت مساعد أكاديمي دقيق جداً. أجب على سؤال الطالب بناءً على النص المقتطع المرفق أدناه فقط.
 
-    النص المقتطع من المستندات واللوائح:
+    النص المقتطع من المستندات والروائح:
     \"\"\"
     {relevant_context}
     \"\"\"
@@ -99,9 +103,9 @@ def generate_direct_answer(query, db):
     سؤال الطالب: "{query}"
 
     التعليمات الصارمة:
-    1. التزم بالنص المرفق فقط ولا تخترع أو تفترض وسائل تقديم من عندك.
-    2. إذا كان النص يحتوي على رابط إلكتروني (URL مثل https://Forms.office.com/...) يخص موضوع السؤال، يجب عليك طباعة الرابط كاملاً وصريحاً للطالب.
-    3. أجب بأسلوب مباشر ومختصر دون إطالة.
+    1. إذا كان النص المقتطع يحتوي على رابط إلكتروني (مثل https://forms.office.com/...)، فاذكر للطالب أن التقديم يكون عبر هذا الرابط واطبعه كاملاً وبشكل واضح.
+    2. لا تطلق على رابط التقديم كلمة "لائحة"، بل سمّه "رابط تقديم الأعذار والتظلمات".
+    3. أجب بدقة واختصار ودون أي افتراضات خارج النص.
     """
 
     try:
