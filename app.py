@@ -21,7 +21,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # الرد الثابت المعتمد عند عدم وجود المعلومة بالنصوص المرفقة
-FIXED_NO_INFO_RESPONSE = "عذراً، هذه المعلومة غير متوفرة في اللوائح المرفقة حالياً، وجاري العمل على تحديثها والرد عليك في وقت لاحق."
+FIXED_NO_INFO_RESPONSE = "عذراً، هذه المعلومة غير متوفرة في اللوائح المرفقة حالياً، وجاري العمل على تحديثها والرد عليكم في وقت لاحق."
 
 # ==========================================
 # 2. قراءة مفتاح الـ API والملفات
@@ -47,7 +47,6 @@ def load_and_index_documents():
                     text = page.extract_text()
                     if text:
                         lines = [p.strip() for p in text.split('\n') if len(p.strip()) > 3]
-                        
                         for i in range(len(lines)):
                             chunk = lines[i]
                             if i + 1 < len(lines):
@@ -66,20 +65,27 @@ indexed_db = load_and_index_documents()
 
 def get_relevant_context(query, db):
     clean_query = normalize_arabic(query)
-    keywords = [w for w in clean_query.split() if len(w) > 1 and w not in ['ماهي', 'ما هي', 'كم', 'متى', 'كيف', 'عن', 'في', 'من', 'طريقه', 'طريقة', 'هل']]
+    # استبعاد الكلمات العامة والتركيز على الكلمات الأساسية
+    stop_words = {'ماهي', 'ما', 'هي', 'كم', 'متى', 'كيف', 'عن', 'في', 'من', 'طريقه', 'طريقة', 'هل', 'يمكن', 'طريقة', 'طريقه', 'كيفية'}
+    keywords = [w for w in clean_query.split() if len(w) > 2 and w not in stop_words]
     
+    if not keywords:
+        return ""
+
     scored = []
     for item in db:
-        score = sum(1 for kw in keywords if kw in item['clean'])
+        # حساب عدد الكلمات المفتاحية الموجودة في الفقرة
+        matches = sum(1 for kw in keywords if kw in item['clean'])
         
-        if item['has_url'] and any(w in clean_query for w in ['رابط', 'تقديم', 'طريقه', 'طريقة', 'نموذج', 'انشطة', 'تظلم', 'عذر', 'اعذار', 'الكترونيا', 'الكتروني']):
-            score += 5
-            
-        if score > 0:
+        # اشترط وجود أكثر من كلمة مفتاحية لضمان قوة التطابق
+        if matches >= 1:
+            score = matches
+            if item['has_url'] and any(w in clean_query for w in ['رابط', 'تقديم', 'نماذج', 'الكتروني', 'الكترونيا']):
+                score += 5
             scored.append((score, item['original']))
             
     scored.sort(key=lambda x: x[0], reverse=True)
-    best_chunks = [item[1] for item in scored[:6]]
+    best_chunks = [item[1] for item in scored[:4]]
     return "\n---\n".join(best_chunks) if best_chunks else ""
 
 # ==========================================
@@ -91,27 +97,27 @@ def generate_direct_answer(query, db):
 
     relevant_context = get_relevant_context(query, db)
     
-    # إذا لم يجد أي كلمة مطابقة في المستندات يُرجع الرد الثابت فوراً
     if not relevant_context:
         return FIXED_NO_INFO_RESPONSE
 
     system_instruction = f"""
-    أنت محرك بحث دقيق ومغلق. مهمتك الحصرية هي الإجابة عن سؤال الطالب اعتماداً فقط وحصرياً على "النص المقتطع" المرفق.
+    أنت نظام إجابة آلي صارم ومغلق تماماً.
+    تعتمد فقط وحصرياً على "النص المرفق" للإجابة.
 
-    قواعد صارمة جداً:
-    1. يمنع منعاً باتاً الاستعانة بأي معلومات خارجية أو عامة من الإنترنت (مثل منصة صحتي، أو إجراءات خارج المستند).
-    2. إذا كانت إجابة السؤال غير مذكورة صراحة وضمنياً في "النص المقتطع"، يُمنع التخمين أو الاجتهاد، ويجب عليك كتابة هذا النص بالضبط وبدون أي زيادة:
+    التعليمات الإلزامية:
+    1. يمنع منعاً باتاً إضافة أي معلومة من خارج النص المرفق أدناه، حتى لو كانت معلومة عامة أو صحيحة.
+    2. إذا لم تكن الإجابة المباشرة والصريحة موجودة داخل "النص المرفق"، يجب عليك كتابة هذه الجملة فقط دون أي تعديل أو إضافة:
        "{FIXED_NO_INFO_RESPONSE}"
-    3. إذا احتوى النص على رابط إلكتروني (URL) يخص الموضوع، اكتبه كاملاً وبوضوح.
+    3. لا تذكر مصطلحات مثل (صحتي، وزارات، منصات خارجية) إلا إذا كانت مكتوبة بالكامل في النص المرفق.
     """
 
     user_prompt = f"""
-    النص المقتطع من اللوائح والمستندات:
+    النص المرفق:
     \"\"\"
     {relevant_context}
     \"\"\"
 
-    سؤال الطالب: "{query}"
+    السؤال: "{query}"
     """
 
     try:
@@ -122,9 +128,11 @@ def generate_direct_answer(query, db):
                 {"role": "system", "content": system_instruction},
                 {"role": "user", "content": user_prompt}
             ],
-            temperature=0.0  # إيقاف الابتكار كلياً للالتزام بالنص الحرفي
+            temperature=0.0
         )
-        return response.choices[0].message.content
+        
+        ans = response.choices[0].message.content.strip()
+        return ans
     except Exception as e:
         return f"❌ خطأ في الاتصال: `{str(e)}`"
 
