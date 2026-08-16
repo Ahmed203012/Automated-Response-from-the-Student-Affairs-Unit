@@ -23,7 +23,7 @@ st.markdown("""
 # ==========================================
 # 2. قراءة مفتاح الـ API والملفات
 # ==========================================
-GROQ_API_KEY = st.secrets.get("GROQ_API_KEY", "")
+GROQ_API_KEY = st.secrets.get("GROQ_API_KEY", "").strip()
 
 def normalize_arabic(text):
     if not text: return ""
@@ -43,11 +43,15 @@ def load_and_index_documents():
                 for page in reader.pages:
                     text = page.extract_text()
                     if text:
-                        chunks = [p.strip() for p in text.split('\n\n') if len(p.strip()) > 10]
-                        if not chunks:
-                            chunks = [p.strip() for p in text.split('\n') if len(p.strip()) > 10]
+                        # تقسيم النص بالأسطر المباشرة لدعم ملفات الروابط والأسطر القصيرة
+                        lines = [p.strip() for p in text.split('\n') if len(p.strip()) > 3]
                         
-                        for chunk in chunks:
+                        # تجميع كل سطرين متتاليين لضمان عدم فصل العنوان عن الرابط
+                        for i in range(len(lines)):
+                            chunk = lines[i]
+                            if i + 1 < len(lines):
+                                chunk += "\n" + lines[i+1]
+                            
                             paragraphs_db.append({
                                 'original': chunk,
                                 'clean': normalize_arabic(chunk)
@@ -60,7 +64,7 @@ indexed_db = load_and_index_documents()
 
 def get_relevant_context(query, db):
     clean_query = normalize_arabic(query)
-    keywords = [w for w in clean_query.split() if len(w) > 2 and w not in ['ماهي', 'ما هي', 'كم', 'متى', 'كيف', 'عن', 'في', 'من']]
+    keywords = [w for w in clean_query.split() if len(w) > 1 and w not in ['ماهي', 'ما هي', 'كم', 'متى', 'كيف', 'عن', 'في', 'من']]
     
     scored = []
     for item in db:
@@ -69,7 +73,7 @@ def get_relevant_context(query, db):
             scored.append((score, item['original']))
             
     scored.sort(key=lambda x: x[0], reverse=True)
-    best_chunks = [item[1] for item in scored[:3]]
+    best_chunks = [item[1] for item in scored[:5]]
     return "\n---\n".join(best_chunks) if best_chunks else ""
 
 # ==========================================
@@ -82,22 +86,22 @@ def generate_direct_answer(query, db):
     relevant_context = get_relevant_context(query, db)
     
     if not relevant_context:
-        return "لم أجد نصاً صريحاً يتعلق باستفسارك في اللوائح المرفقة."
+        return "لم أجد نصاً صريحاً يتعلق باستفسارك في اللوائح والروابط المرفقة."
 
     prompt = f"""
-    أنت مساعد أكاديمي ذكي. أجب على سؤال الطالب بناءً على النص المقتطع التالي فقط.
+    أنت مساعد أكاديمي دقيق جداً. أجب على سؤال الطالب بناءً على النص المقتطع المرفق أدناه فقط.
 
-    النص المقتطع من اللائحة:
+    النص المقتطع من المستندات واللوائح:
     \"\"\"
     {relevant_context}
     \"\"\"
 
     سؤال الطالب: "{query}"
 
-    التعليمات:
-    1. أجب بأسلوب مباشر ومقتضب جداً باللغة العربية (في سطر أو سطرين فقط).
-    2. اذكر المهل والشروط والأرقام فوراً.
-    3. لا تطبع النص الكامل للائحة.
+    التعليمات الصارمة:
+    1. التزم بالنص المرفق فقط ولا تخترع أو تفترض وسائل تقديم من عندك.
+    2. إذا كان النص يحتوي على رابط إلكتروني (URL مثل https://Forms.office.com/...) يخص موضوع السؤال، يجب عليك طباعة الرابط كاملاً وصريحاً للطالب.
+    3. أجب بأسلوب مباشر ومختصر دون إطالة.
     """
 
     try:
@@ -105,7 +109,7 @@ def generate_direct_answer(query, db):
         response = client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.2
+            temperature=0.1
         )
         return response.choices[0].message.content
     except Exception as e:
@@ -125,7 +129,7 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-if prompt := st.chat_input("اكتب استفسارك هنا (مثال: ما هي مهلة تقديم عذر الوفاة؟)..."):
+if prompt := st.chat_input("اكتب استفسارك هنا (مثال: ما هو رابط تقديم الأعذار؟)..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
