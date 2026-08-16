@@ -20,6 +20,9 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# الرد الثابت المعتمد عند عدم وجود المعلومة بالنصوص المرفقة
+FIXED_NO_INFO_RESPONSE = "عذراً، هذه المعلومة غير متوفرة في اللوائح المرفقة حالياً، وجاري العمل على تحديثها والرد عليك في وقت لاحق."
+
 # ==========================================
 # 2. قراءة مفتاح الـ API والملفات
 # ==========================================
@@ -63,14 +66,13 @@ indexed_db = load_and_index_documents()
 
 def get_relevant_context(query, db):
     clean_query = normalize_arabic(query)
-    keywords = [w for w in clean_query.split() if len(w) > 1 and w not in ['ماهي', 'ما هي', 'كم', 'متى', 'كيف', 'عن', 'في', 'من', 'طريقه', 'طريقة', 'كيفية']]
+    keywords = [w for w in clean_query.split() if len(w) > 1 and w not in ['ماهي', 'ما هي', 'كم', 'متى', 'كيف', 'عن', 'في', 'من', 'طريقه', 'طريقة', 'هل']]
     
     scored = []
     for item in db:
         score = sum(1 for kw in keywords if kw in item['clean'])
         
-        # منح أولوية مضاعفة للمستندات التي تحتوي على روابط عند الاستفسار عن التقديم/الروابط
-        if item['has_url'] and any(w in clean_query for w in ['رابط', 'تقديم', 'طريقه', 'طريقة', 'نموذج', 'انشطة', 'انشطه', 'تظلم', 'عذر', 'اعذار']):
+        if item['has_url'] and any(w in clean_query for w in ['رابط', 'تقديم', 'طريقه', 'طريقة', 'نموذج', 'انشطة', 'تظلم', 'عذر', 'اعذار', 'الكترونيا', 'الكتروني']):
             score += 5
             
         if score > 0:
@@ -89,41 +91,48 @@ def generate_direct_answer(query, db):
 
     relevant_context = get_relevant_context(query, db)
     
+    # إذا لم يجد أي كلمة مطابقة في المستندات يُرجع الرد الثابت فوراً
     if not relevant_context:
-        return "لم أجد نصاً صريحاً يتعلق باستفسارك في المستندات المرفقة."
+        return FIXED_NO_INFO_RESPONSE
 
-    prompt = f"""
-    أنت مساعد أكاديمي دقيق جداً. أجب على سؤال الطالب بناءً على النص المقتطع المرفق أدناه فقط.
+    system_instruction = f"""
+    أنت محرك بحث دقيق ومغلق. مهمتك الحصرية هي الإجابة عن سؤال الطالب اعتماداً فقط وحصرياً على "النص المقتطع" المرفق.
 
-    النص المقتطع من المستندات والروائح:
+    قواعد صارمة جداً:
+    1. يمنع منعاً باتاً الاستعانة بأي معلومات خارجية أو عامة من الإنترنت (مثل منصة صحتي، أو إجراءات خارج المستند).
+    2. إذا كانت إجابة السؤال غير مذكورة صراحة وضمنياً في "النص المقتطع"، يُمنع التخمين أو الاجتهاد، ويجب عليك كتابة هذا النص بالضبط وبدون أي زيادة:
+       "{FIXED_NO_INFO_RESPONSE}"
+    3. إذا احتوى النص على رابط إلكتروني (URL) يخص الموضوع، اكتبه كاملاً وبوضوح.
+    """
+
+    user_prompt = f"""
+    النص المقتطع من اللوائح والمستندات:
     \"\"\"
     {relevant_context}
     \"\"\"
 
     سؤال الطالب: "{query}"
-
-    التعليمات الصارمة:
-    1. إذا كان النص المقتطع يحتوي على رابط إلكتروني (مثل https://forms.office.com/...)، فاذكر للطالب أن التقديم يكون عبر هذا الرابط واطبعه كاملاً وبشكل واضح.
-    2. لا تطلق على رابط التقديم كلمة "لائحة"، بل سمّه "رابط تقديم الأعذار والتظلمات".
-    3. أجب بدقة واختصار ودون أي افتراضات خارج النص.
     """
 
     try:
         client = Groq(api_key=GROQ_API_KEY)
         response = client.chat.completions.create(
             model="llama-3.1-8b-instant",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.1
+            messages=[
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.0  # إيقاف الابتكار كلياً للالتزام بالنص الحرفي
         )
         return response.choices[0].message.content
     except Exception as e:
-        return f"❌ خطأ في الاتصال بـ Groq: `{str(e)}`"
+        return f"❌ خطأ في الاتصال: `{str(e)}`"
 
 # ==========================================
 # 4. الواجهة الرئيسية
 # ==========================================
 st.title("🎓 المجيب الأكاديمي الذكي")
-st.write("أهلاً بك! اكتب استفسارك وسيجيبك النظام فوراً وبشكل مباشر.")
+st.write("أهلاً بك! اكتب استفسارك وسيجيبك النظام فوراً وبشكل مباشر من واقع اللوائح المرفقة.")
 st.divider()
 
 if "messages" not in st.session_state:
@@ -133,13 +142,13 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-if prompt := st.chat_input("اكتب استفسارك هنا (مثال: ما هو رابط تقديم الأعذار؟)..."):
+if prompt := st.chat_input("اكتب استفسارك هنا..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        with st.spinner("جاري استخراج الإجابة..."):
+        with st.spinner("جاري مراجعة اللوائح..."):
             answer = generate_direct_answer(prompt, indexed_db)
             st.markdown(answer)
     
