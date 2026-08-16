@@ -2,7 +2,7 @@ import streamlit as st
 import pypdf
 import os
 import re
-import requests
+from groq import Groq
 
 # ==========================================
 # 1. إعدادات الصفحة والواجهة
@@ -23,7 +23,7 @@ st.markdown("""
 # ==========================================
 # 2. قراءة مفتاح الـ API والملفات
 # ==========================================
-GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
+GROQ_API_KEY = st.secrets.get("GROQ_API_KEY", "")
 
 def normalize_arabic(text):
     if not text: return ""
@@ -73,11 +73,11 @@ def get_relevant_context(query, db):
     return "\n---\n".join(best_chunks) if best_chunks else ""
 
 # ==========================================
-# 3. الاتصال المباشر عبر REST API
+# 3. الاتصال المباشر عبر Groq
 # ==========================================
 def generate_direct_answer(query, db):
-    if not GEMINI_API_KEY:
-        return "⚠️ لم يتم العثور على `GEMINI_API_KEY` في Streamlit Secrets."
+    if not GROQ_API_KEY:
+        return "⚠️ لم يتم العثور على `GROQ_API_KEY` في Streamlit Secrets."
 
     relevant_context = get_relevant_context(query, db)
     
@@ -95,31 +95,21 @@ def generate_direct_answer(query, db):
     سؤال الطالب: "{query}"
 
     التعليمات:
-    1. أجب بأسلوب مباشر ومقتضب جداً (في سطر أو سطرين فقط).
+    1. أجب بأسلوب مباشر ومقتضب جداً باللغة العربية (في سطر أو سطرين فقط).
     2. اذكر المهل والشروط والأرقام فوراً.
     3. لا تطبع النص الكامل للائحة.
     """
 
-    # استخدام المسار المستقر عبر v1 مع gemini-1.5-flash
-    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
-    headers = {'Content-Type': 'application/json'}
-    payload = {
-        "contents": [{
-            "parts": [{"text": prompt}]
-        }]
-    }
-
     try:
-        response = requests.post(url, json=payload, headers=headers)
-        res_json = response.json()
-        
-        if response.status_code == 200:
-            return res_json['candidates'][0]['content']['parts'][0]['text']
-        else:
-            err_msg = res_json.get('error', {}).get('message', str(res_json))
-            return f"❌ خطأ من الخادم ({response.status_code}):\n\n`{err_msg}`"
+        client = Groq(api_key=GROQ_API_KEY)
+        response = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.2
+        )
+        return response.choices[0].message.content
     except Exception as e:
-        return f"❌ خطأ في الاتصال الشبكي: `{str(e)}`"
+        return f"❌ خطأ في الاتصال بـ Groq: `{str(e)}`"
 
 # ==========================================
 # 4. الواجهة الرئيسية
