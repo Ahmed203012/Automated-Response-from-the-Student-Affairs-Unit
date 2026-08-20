@@ -116,8 +116,8 @@ def generate_direct_answer(query, db):
     السؤال: "{query}"
     """
 
-    # تنظيف اسم النموذج تلقائياً لمنع أخطاء الأسطر والمسافات
-    selected_model = "llama3-8b-8192".replace("\n", "").strip()
+    # الاعتماد على النموذج النشط والمتاح رسمياً في Groq
+    selected_model = "llama-3.1-8b-instant"
 
     try:
         client = Groq(api_key=GROQ_API_KEY)
