@@ -64,7 +64,7 @@ indexed_db = load_and_index_documents()
 
 def get_relevant_context(query, db):
     clean_query = normalize_arabic(query)
-    stop_words = {'ماهي', 'ما', 'هي', 'كم', 'متى', 'كيف', 'عن', 'في', 'من', 'طريقه', 'طريقة', 'هل', 'يمكن', 'طريقة', 'طريقه', 'كيفية'}
+    stop_words = {'ماهي', 'ما', 'هي', 'كم', 'متى', 'كيف', 'عن', 'في', 'من', 'طريقه', 'طريقة', 'هل', 'يمكن', 'كيفية'}
     keywords = [w for w in clean_query.split() if len(w) > 2 and w not in stop_words]
     
     if not keywords:
@@ -85,7 +85,7 @@ def get_relevant_context(query, db):
     return "\n---\n".join(best_chunks) if best_chunks else ""
 
 # ==========================================
-# 3. الاتصال المباشر عبر Groq
+# 3. الاتصال عبر Groq مع التغيير التلقائي للنماذج
 # ==========================================
 def generate_direct_answer(query, db):
     if not GROQ_API_KEY:
@@ -116,24 +116,34 @@ def generate_direct_answer(query, db):
     السؤال: "{query}"
     """
 
-    # الاعتماد على النموذج النشط والمتاح رسمياً في Groq
-    selected_model = "llama-3.1-8b-instant"
+    # قائمة النماذج المتاحة بالتسلل (سيجرب الأول، ثم الثاني... إلخ)
+    candidate_models = [
+        "llama-3.3-70b-versatile",
+        "llama-3.2-3b-preview",
+        "llama-3.2-1b-preview",
+        "mixtral-8x7b-32768",
+        "gemma2-9b-it"
+    ]
 
-    try:
-        client = Groq(api_key=GROQ_API_KEY)
-        response = client.chat.completions.create(
-            model=selected_model,
-            messages=[
-                {"role": "system", "content": system_instruction},
-                {"role": "user", "content": user_prompt}
-            ],
-            temperature=0.0
-        )
-        
-        ans = response.choices[0].message.content.strip()
-        return ans
-    except Exception as e:
-        return f"❌ خطأ في الاتصال: `{str(e)}`"
+    client = Groq(api_key=GROQ_API_KEY)
+    last_error = ""
+
+    for model_name in candidate_models:
+        try:
+            response = client.chat.completions.create(
+                model=model_name,
+                messages=[
+                    {"role": "system", "content": system_instruction},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=0.0
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            last_error = str(e)
+            continue # تجربة النموذج التالي فوراً
+
+    return f"❌ خطأ في الاتصال بكافة النماذج: `{last_error}`"
 
 # ==========================================
 # 4. الواجهة الرئيسية
