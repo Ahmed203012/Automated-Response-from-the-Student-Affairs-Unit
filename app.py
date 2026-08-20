@@ -116,10 +116,13 @@ def generate_direct_answer(query, db):
     السؤال: "{query}"
     """
 
+    # تنظيف اسم النموذج تلقائياً لمنع أخطاء الأسطر والمسافات
+    selected_model = "llama3-8b-8192".replace("\n", "").strip()
+
     try:
         client = Groq(api_key=GROQ_API_KEY)
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model=selected_model,
             messages=[
                 {"role": "system", "content": system_instruction},
                 {"role": "user", "content": user_prompt}
