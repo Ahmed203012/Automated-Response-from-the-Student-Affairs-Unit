@@ -85,7 +85,7 @@ def get_relevant_context(query, db):
     return "\n---\n".join(best_chunks) if best_chunks else ""
 
 # ==========================================
-# 3. الاتصال المباشر بنموذج Groq الرسمي المعتمد
+# 3. الاتصال المباشر
 # ==========================================
 def generate_direct_answer(query, db):
     if not GROQ_API_KEY:
@@ -120,7 +120,7 @@ def generate_direct_answer(query, db):
 
     try:
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="".join("llama-3.3-70b-versatile".split()),
             messages=[
                 {"role": "system", "content": system_instruction},
                 {"role": "user", "content": user_prompt}
