@@ -20,7 +20,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# الرد الثابت المعتمد عند عدم وجود المعلومة بالنصوص المرفقة
 FIXED_NO_INFO_RESPONSE = "عذراً، هذه المعلومة غير متوفرة في اللوائح المرفقة حالياً، وجاري العمل على تحديثها والرد عليكم في وقت لاحق."
 
 # ==========================================
@@ -65,7 +64,6 @@ indexed_db = load_and_index_documents()
 
 def get_relevant_context(query, db):
     clean_query = normalize_arabic(query)
-    # استبعاد الكلمات العامة والتركيز على الكلمات الأساسية
     stop_words = {'ماهي', 'ما', 'هي', 'كم', 'متى', 'كيف', 'عن', 'في', 'من', 'طريقه', 'طريقة', 'هل', 'يمكن', 'طريقة', 'طريقه', 'كيفية'}
     keywords = [w for w in clean_query.split() if len(w) > 2 and w not in stop_words]
     
@@ -74,10 +72,8 @@ def get_relevant_context(query, db):
 
     scored = []
     for item in db:
-        # حساب عدد الكلمات المفتاحية الموجودة في الفقرة
         matches = sum(1 for kw in keywords if kw in item['clean'])
         
-        # اشترط وجود أكثر من كلمة مفتاحية لضمان قوة التطابق
         if matches >= 1:
             score = matches
             if item['has_url'] and any(w in clean_query for w in ['رابط', 'تقديم', 'نماذج', 'الكتروني', 'الكترونيا']):
@@ -123,7 +119,7 @@ def generate_direct_answer(query, db):
     try:
         client = Groq(api_key=GROQ_API_KEY)
         response = client.chat.completions.create(
-           model="llama-3.1-8b-instant".strip(),
+            model="llama-3.1-8b-instant".strip(),
             messages=[
                 {"role": "system", "content": system_instruction},
                 {"role": "user", "content": user_prompt}
