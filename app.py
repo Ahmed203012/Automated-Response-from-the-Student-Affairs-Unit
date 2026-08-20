@@ -85,7 +85,7 @@ def get_relevant_context(query, db):
     return "\n---\n".join(best_chunks) if best_chunks else ""
 
 # ==========================================
-# 3. الاتصال عبر Groq مع التغيير التلقائي للنماذج
+# 3. الاتصال المباشر بنموذج Groq الرسمي المعتمد
 # ==========================================
 def generate_direct_answer(query, db):
     if not GROQ_API_KEY:
@@ -116,34 +116,20 @@ def generate_direct_answer(query, db):
     السؤال: "{query}"
     """
 
-    # قائمة النماذج المتاحة بالتسلل (سيجرب الأول، ثم الثاني... إلخ)
-    candidate_models = [
-        "llama-3.3-70b-versatile",
-        "llama-3.2-3b-preview",
-        "llama-3.2-1b-preview",
-        "mixtral-8x7b-32768",
-        "gemma2-9b-it"
-    ]
-
     client = Groq(api_key=GROQ_API_KEY)
-    last_error = ""
 
-    for model_name in candidate_models:
-        try:
-            response = client.chat.completions.create(
-                model=model_name,
-                messages=[
-                    {"role": "system", "content": system_instruction},
-                    {"role": "user", "content": user_prompt}
-                ],
-                temperature=0.0
-            )
-            return response.choices[0].message.content.strip()
-        except Exception as e:
-            last_error = str(e)
-            continue # تجربة النموذج التالي فوراً
-
-    return f"❌ خطأ في الاتصال بكافة النماذج: `{last_error}`"
+    try:
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.0
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        return f"❌ خطأ في الاتصال: `{str(e)}`"
 
 # ==========================================
 # 4. الواجهة الرئيسية
