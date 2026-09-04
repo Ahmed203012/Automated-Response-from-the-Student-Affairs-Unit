@@ -6,18 +6,15 @@ from google import genai
 
 st.set_page_config(page_title="كليات الرؤية", layout="centered", page_icon="🎓")
 
-# --- تصميم الهوية النهائي RTL + الذهبي + الشعار ---
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap');
-html, body, [class*="css"] { font-family: 'Tajawal', sans-serif !important; direction: rtl !important; text-align: right !important; }
-h1, h2, h3, h4, p, div, input, label, span { text-align: right !important; direction: rtl !important; }
-.stTextInput > div > div > input { direction: rtl !important; text-align: right !important; }
-.stButton > button { width: 100%; background-color: #C9A86A !important; color: #1A1A1A !important; font-weight: bold !important; border-radius: 10px !important; border: none !important; padding: 12px !important; font-size: 17px !important; }
-.stButton > button:hover { background-color: #B8965A !important; color: white !important; }
-.answer-box { background-color: #FFF9E6 !important; border-right: 6px solid #C9A86A; padding: 18px; border-radius: 10px; margin-top: 18px; direction: rtl !important; text-align: right !important; line-height: 1.8; }
-.disclaimer-box { background-color: #FFF8D6; border: 1px solid #C9A86A; padding: 12px; border-radius: 8px; margin-top: 18px; font-size: 13.5px; color: #665500; direction: rtl !important; text-align: right !important; }
-.logo-container { text-align: center !important; margin-bottom: 10px; }
+html, body, [class*="css"] { font-family: 'Tajawal', sans-serif!important; direction: rtl!important; text-align: right!important; }
+h1, h2, h3, h4, p, div, input, label, span { text-align: right!important; direction: rtl!important; }
+.stTextInput > div > div > input { direction: rtl!important; text-align: right!important; }
+.stButton > button { width: 100%; background-color: #C9A86A!important; color: #1A1A1A!important; font-weight: bold!important; border-radius: 10px!important; border: none!important; padding: 12px!important; font-size: 17px!important; }
+.answer-box { background-color: #FFF9E6!important; border-right: 6px solid #C9A86A; padding: 18px; border-radius: 10px; margin-top: 18px; direction: rtl!important; text-align: right!important; line-height: 1.9; }
+.disclaimer-box { background-color: #FFF8D6; border: 1px solid #C9A86A; padding: 12px; border-radius: 8px; margin-top: 18px; font-size: 13.5px; color: #665500; direction: rtl!important; text-align: right!important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -29,63 +26,78 @@ except:
     st.stop()
 
 @st.cache_data(show_spinner=False)
-def load_all_documents():
-    txt = ""
+def load_all_chunks():
+    chunks = []
     for file in os.listdir('.'):
         if not file.endswith('.pdf'): continue
         try:
             with pdfplumber.open(file) as pdf:
-                for page in pdf.pages:
+                for i, page in enumerate(pdf.pages):
                     t = page.extract_text()
-                    if t: txt += f"\n--- {file} ---\n" + t + "\n"
+                    if t and len(t.strip()) > 40:
+                        chunks.append({"file": file, "page": i, "text": t})
                     for table in page.extract_tables() or []:
+                        txt = ""
                         for row in table:
                             if row:
                                 clean = [str(c).strip() for c in row if c and str(c).strip()]
                                 if clean: txt += " | ".join(clean) + "\n"
-        except:
-            try:
-                reader = pypdf.PdfReader(file)
-                for p in reader.pages:
-                    t = p.extract_text()
-                    if t: txt += t + "\n"
-            except: pass
-    # --- حل مشكلة السرعة: نأخذ أهم 12000 حرف فقط ---
-    return txt.strip()[:12000]
+                        if txt: chunks.append({"file": file, "page": i, "text": txt})
+        except: pass
+    return chunks
 
-context = load_all_documents()
+all_chunks = load_all_chunks()
 
-# --- الشعار (لو رفعت ملف اسمه logo.png سيظهر تلقائيا) ---
-if os.path.exists("logo.png"):
-    st.markdown("<div class='logo-container'>", unsafe_allow_html=True)
-    st.image("logo.png", width=120)
-    st.markdown("</div>", unsafe_allow_html=True)
+def get_relevant_context(query, top_k=3):
+    query_words = query.split()
+    scored = []
+    for ch in all_chunks:
+        score = 0
+        for w in query_words:
+            if w in ch["text"]: score += 1
+        if "ولادة" in query and "ولادة" in ch["text"]: score += 15
+        if "وفاة" in query and "وفاة" in ch["text"]: score += 15
+        if "عذر" in query and "عذر" in ch["text"]: score += 5
+        if "عميد" in query and "عميد" in ch["text"]: score += 15
+        scored.append((score, ch))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    relevant = [c for s,c in scored[:top_k] if s>0]
+    if not relevant: relevant = [c for _,c in scored[:2]]
+    return "\n\n---\n\n".join([f"{c['text']}" for c in relevant])
 
-# --- العناوين باللون الذهبي والأسود ---
-st.markdown("<h1 style='text-align: right; color: #C9A86A; margin-bottom:0; font-weight:800;'>كليات الرؤية - Vision Colleges</h1>", unsafe_allow_html=True)
-st.markdown("<h3 style='text-align: right; color: #222; margin-top:6px; font-weight:700;'>الاستفسار الآلي - وحدة شؤون الطلبة</h3>", unsafe_allow_html=True)
-st.markdown("<p style='text-align:right; color:#555; margin-top:10px;'>كلية الرؤية بالرياض ترحب بكم، ويمكنكم طرح سؤالكم هنا وسيتم الرد من واقع اللوائح المعتمدة</p>", unsafe_allow_html=True)
+# --- إصلاح الشعار: يدعم كل الأسماء ---
+logo_file = None
+for name in ["logo.png", "Logo.png", "LOGO.PNG", "logo.PNG", "logo.jpg", "Logo.jpg"]:
+    if os.path.exists(name):
+        logo_file = name
+        break
+if logo_file:
+    col1, col2, col3 = st.columns([1,2,1])
+    with col2:
+        st.image(logo_file, width=150)
 
-user_query = st.text_input(" ", placeholder="مثال: ما الفترة المسموح بها لتقديم العذر في حالة الوفاة؟")
+st.markdown("<h1 style='text-align: right; color: #000000; margin-bottom:0; font-weight:800;'>كليات الرؤية - Vision Colleges</h1>", unsafe_allow_html=True)
+st.markdown("<h3 style='text-align: right; color: #000000; margin-top:6px; font-weight:700;'>الاستفسار الآلي - وحدة شؤون الطلبة</h3>", unsafe_allow_html=True)
+st.markdown("<p style='text-align:right; color:#555;'>كلية الرؤية بالرياض ترحب بكم، ويمكنكم طرح سؤالكم هنا وسيتم الرد من واقع اللوائح المعتمدة</p>", unsafe_allow_html=True)
+
+user_query = st.text_input(" ", placeholder="كلية الرؤية بالرياض ترحب بكم، يمكنكم طرح سؤالكم هنا")
 submit_button = st.button("اضغط هنا للحصول على الإجابة")
 
 DISCLAIMER_TEXT = "تنويه: هذه الإجابة مستنبطة من واقع لوائح الكلية المعتمدة، وللتأكيد النهائي أو الحالات الخاصة يرجى مراجعة وحدة شؤون الطلبة عبر البوابة الإلكترونية."
+PORTAL_URL = "https://portal.vision.edu.sa"
 
 if (submit_button or user_query) and user_query:
-    with st.spinner("جاري البحث..."):
+    with st.spinner("جاري البحث في اللوائح..."):
         try:
-            base = "انت مساعد اكاديمي في كليات الرؤية. اجب باختصار ودقة من النص فقط، واذكر اسم العميد من جدول مجلس الكلية اذا سئلت. اللغة عربية فصحى RTL."
-            full_prompt = base + "\n\nالنص:\n" + context + "\n\nسؤال:\n" + user_query
-            # ترتيب جديد للسرعة: نبدأ بالأسرع
-            candidates = ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-flash-latest", "gemini-3-flash-preview"]
-            for model_name in candidates:
+            relevant_context = get_relevant_context(user_query)
+            base = "انت مساعد دقيق جدا في كليات الرؤية. اجب فقط من النصوص المرتبطة المرفقة."
+            full_prompt = base + "\n\nالنصوص:\n" + relevant_context + "\n\nسؤال الطالب:\n" + user_query
+            for model_name in ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-flash-latest"]:
                 try:
                     response = client.models.generate_content(model=model_name, contents=full_prompt)
-                    st.markdown(f"<div class='answer-box'><h4 style='color:#8C6D2F; text-align:right; margin-top:0;'>الإجابة من واقع اللائحة:</h4><div style='text-align:right; direction:rtl;'>{response.text}</div></div>", unsafe_allow_html=True)
-                    st.markdown(f"<div class='disclaimer-box'>⚠️ {DISCLAIMER_TEXT} <a href='https://vision.edu.sa' target='_blank'>رابط البوابة</a></div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='answer-box'><h4 style='color:#000000; text-align:right;'>الإجابة من واقع اللائحة:</h4><div style='text-align:right; direction:rtl;'>{response.text}</div></div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='disclaimer-box'>⚠️ {DISCLAIMER_TEXT} <a href='{PORTAL_URL}' target='_blank' style='color:#000000; font-weight:bold;'>رابط البوابة الإلكترونية</a></div>", unsafe_allow_html=True)
                     break
                 except: continue
-            else:
-                st.error("النظام مشغول حاليا، حاول بعد دقيقة")
         except Exception as e:
             st.error(str(e))
