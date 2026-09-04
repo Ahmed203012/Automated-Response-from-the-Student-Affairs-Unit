@@ -1,20 +1,7 @@
 import os
-import sys
-import subprocess
-
-try:
-    from google import genai
-except ImportError:
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "google-genai"])
-    from google import genai
-
-try:
-    import pypdf
-except ImportError:
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "pypdf"])
-    import pypdf
-
 import streamlit as st
+import google.generativeai as genai
+import pypdf
 
 st.set_page_config(page_title="كليات الرؤية - Vision Colleges", layout="centered")
 
@@ -43,10 +30,6 @@ st.markdown("""
         background-color: #1D4ED8;
         color: white;
     }
-    .stAlert, .stMarkdown {
-        text-align: right !important;
-        direction: rtl !important;
-    }
     .disclaimer-box {
         background-color: #F3F4F6;
         border-right: 4px solid #1E3A8A;
@@ -61,11 +44,13 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# وضع المفتاح هنا مباشرة بين التنصيص
-API_KEY = "AQ.Ab8RN6KRoNXv8ScljVw_JzWyrrFmiPZtuZzyCwEhxPgOsmXG7w"
-
-# تهيئة العميل الجديد
-client = genai.Client(api_key=API_KEY)
+# --- قراءة المفتاح من Secrets ---
+try:
+    API_KEY = st.secrets["GEMINI_API_KEY"]
+    genai.configure(api_key=API_KEY)
+except Exception as e:
+    st.error("خطأ: لم يتم العثور على GEMINI_API_KEY في Secrets. أضف المفتاح في إعدادات Streamlit Cloud.")
+    st.stop()
 
 @st.cache_data
 def load_all_documents():
@@ -110,36 +95,8 @@ if (submit_button or user_query) and user_query:
     else:
         with st.spinner("جاري البحث داخل اللائحة المرفقة..."):
             try:
+                model = genai.GenerativeModel('gemini-1.5-flash')
+                
                 strict_prompt = f"""
 أنت مساعد أكاديمي لشؤون الطلبة في كليات الرؤية.
-
-تنبيه صارم جداً: أجب على سؤال الطالب بناءً على النص المرفق أدناه فقط لا غير.
-إذا كانت المعلومة غير مذكورة في النص المرفق، أجب بالحرف الواحد: "عذراً، هذه المعلومة غير مذكورة في اللائحة الأكاديمية المرفقة".
-يُمنع منعاً باتاً استخدام أي معلومات أو معارف عامة من خارج هذا النص.
-
-النص المرفق من اللوائح:
-{context}
-
-سؤال الطالب:
-{user_query}
-"""
-
-                # استخدام أسلوب الاستدعاء الحديث المباشر
-                response = client.models.generate_content(
-                    model='gemini-2.5-flash',
-                    contents=strict_prompt,
-                )
-                
-                st.markdown("### الإجابة من واقع اللائحة:")
-                st.write(response.text)
-                
-                disclaimer_html = """
-                <div class="disclaimer-box">
-                    <strong>تنويه:</strong> هذا برنامج رد آلي ويمكن أن تكون الإجابات في بعض الأحيان غير دقيقة، وعليه تعتبر اللوائح والأنظمة الرسمية المعتمدة والمعلنة عبر الرابط التالي هي المرجع المعتمد والأخير للكلية: 
-                    <a href="https://elearning.vision.edu.sa/course/view.php?id=188" target="_blank" style="color: #1E3A8A; word-break: break-all;">https://elearning.vision.edu.sa/course/view.php?id=188</a>
-                </div>
-                """
-                st.markdown(disclaimer_html, unsafe_allow_html=True)
-                
-            except Exception as e:
-                st.error(f"حدث خطأ أثناء الاستعلام: {e}")
+تنبيه صارم جداً: أجب
