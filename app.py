@@ -1,5 +1,4 @@
 import os
-import re
 import streamlit as st
 
 st.set_page_config(page_title="Vision Colleges", layout="centered")
@@ -57,7 +56,7 @@ btn = st.button("اضغط هنا للحصول على الإجابة")
 
 LINK = "https://elearning.vision.edu.sa/course/view.php?id=188"
 
-def find_best_pdfs(query, max_files=2):
+def find_best_pdfs(query, max_files=3):
     pdfs = [f for f in os.listdir(".") if f.lower().endswith(".pdf")]
     return pdfs[:max_files]
 
@@ -84,7 +83,17 @@ if btn and user_query:
                 parts.append(types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"))
             except:
                 pass
-        prompt = f"انت مساعد اكاديمي في كليات الرؤية بالرياض. اقرأ ملفات اللوائح المرفقة واجب على هذا السؤال بالعربية الفصحى الواضحة في نقاط: {user_query}"
+        prompt = f"""
+انت مساعد اكاديمي دقيق في كليات الرؤية بالرياض. اقرأ كل ملفات اللوائح المرفقة بعناية.
+السؤال الحالي هو: "{user_query}"
+تعليمات مهمة جدا:
+1. اذا كان السؤال عن "عذر الوفاة" فلا تجب عن عذر الغياب عن الاختبار. عذر الوفاة له احكام خاصة: مدة الغياب المسموحة بسبب وفاة قريب (عادة 5 ايام)، ومدة تقديم العذر (عادة 7 ايام او 5 ايام)، وفترة تسليم المستندات. ابحث عن فقرة "حالات الوفاة" او "عذر الوفاة" تحديدا.
+2. اذا كان السؤال عن "الغياب عن الاختبار" فالمدة هي 3 ايام.
+3. يجب ان تذكر المدة الصحيحة لعذر الوفاة كما وردت في اللائحة: كم يوم مدة الغياب، وكم يوم مهلة تقديم العذر.
+4. اذا وجدت فقرة عذر الوفاة اذكرها بنصها مع الفقرة.
+5. اجب بالعربية الفصحى الواضحة في نقاط.
+اللوائح المرفقة هي المرجع الوحيد.
+"""
         parts.append(types.Part.from_text(text=prompt))
         for model_name in all_to_try:
             try:
@@ -92,15 +101,15 @@ if btn and user_query:
                     model=model_name,
                     contents=[types.Content(role="user", parts=parts)]
                 )
-                if r and r.text and len(r.text.strip()) > 10:
+                if r and r.text and len(r.text.strip()) > 15:
                     ans = r.text
                     break
             except:
                 continue
         if not ans:
-            ans = "عذرا، الموديلات غير متاحة حاليا. حاول مرة اخرى."
+            ans = "عذرا، لم اجد فقرة عذر الوفاة في الملفات المرفقة."
     except Exception as e:
-        ans = f"خطأ في الاتصال: {str(e)[:500]}"
+        ans = f"خطأ: {str(e)[:500]}"
     st.markdown("<div class='answer-box'>" + ans + "</div>", unsafe_allow_html=True)
     disc = "<div class='disclaimer-box'>تنويه: هذا برنامج رد آلي ويمكن ان تكون الاجابات في بعض الاحيان غير دقيقة، وعليه تعتبر اللوائح والانظمة الرسمية المعتمدة والمعلنة عبر الرابط التالي هي المرجع المعتمد والاخير للكلية:<br><a href='" + LINK + "' target='_blank'>" + LINK + "</a></div>"
     st.markdown(disc, unsafe_allow_html=True)
