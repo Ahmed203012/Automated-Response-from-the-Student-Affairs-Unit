@@ -1,4 +1,6 @@
 streamlit
-google-genai
 pdfplumber
-pypdf
+PyMuPDF
+google-genai
+arabic-reshaper
+python-bidi
