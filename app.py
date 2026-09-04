@@ -2,10 +2,10 @@ import streamlit as st
 import os
 
 try:
-    from google import genai
+    import google.generativeai as genai
 except ImportError:
-    os.system("pip install -q google-genai")
-    from google import genai
+    os.system("pip install -q google-generativeai")
+    import google.generativeai as genai
 
 try:
     import pypdf
@@ -60,8 +60,11 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# مفتاح الـ API الثابت الخاص بك الذي تبين أنه يبدأ بـ AQ في شاشتك
+# مفتاح API الخاص بك
 API_KEY = "AQ.Ab8RN6Lg3ba1upRsr-04ug-Qqp4NvI8cIIYmuGzWaw22xHW8Qg" 
+
+# تهيئة المكتبة بالمفتاح
+genai.configure(api_key=API_KEY)
 
 @st.cache_data
 def load_all_documents():
@@ -88,7 +91,7 @@ def load_all_documents():
 
 context = load_all_documents()
 
-# عرض شعار الكلية إذا كان مرفوعاً باسم logo.png
+# عرض شعار الكلية إذا كان مرفوعاً
 if os.path.exists("logo.png"):
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
@@ -111,8 +114,7 @@ if (submit_button or user_query) and user_query:
     else:
         with st.spinner("جاري البحث داخل اللائحة المرفقة..."):
             try:
-                # التهيئة الصحيحة باستخدام api_key
-                client = genai.Client(api_key=API_KEY)
+                model = genai.GenerativeModel('gemini-1.5-flash')
 
                 strict_prompt = f"""
 أنت مساعد أكاديمي لشؤون الطلبة في كليات الرؤية.
@@ -128,15 +130,11 @@ if (submit_button or user_query) and user_query:
 {user_query}
 """
 
-                response = client.models.generate_content(
-                    model='gemini-2.5-flash',
-                    contents=strict_prompt,
-                )
+                response = model.generate_content(strict_prompt)
                 
                 st.markdown("### الإجابة من واقع اللائحة:")
                 st.write(response.text)
                 
-                # التنويه الإجباري مع كل إجابة
                 disclaimer_html = """
                 <div class="disclaimer-box">
                     <strong>تنويه:</strong> هذا برنامج رد آلي ويمكن أن تكون الإجابات في بعض الأحيان غير دقيقة، وعليه تعتبر اللوائح والأنظمة الرسمية المعتمدة والمعلنة عبر الرابط التالي هي المرجع المعتمد والأخير للكلية: 
