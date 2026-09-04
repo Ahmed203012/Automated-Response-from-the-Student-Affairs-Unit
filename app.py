@@ -3,23 +3,13 @@ import streamlit as st
 import google.generativeai as genai
 import pypdf
 
-st.set_page_config(page_title="كليات الرؤية - Vision Colleges", layout="centered")
+st.set_page_config(page_title="Vision Colleges", layout="centered")
 
 st.markdown("""
-    <style>
-    html, body, [class*="css"], div, p, span, input, button, label {
-        direction: rtl !important;
-        text-align: right !important;
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    }
-    .stButton > button {
-        width: 100%;
-        background-color: #1E3A8A;
-        color: white;
-        font-weight: bold;
-        border-radius: 8px;
-    }
-    </style>
+<style>
+html, body, [class*="css"] { direction: rtl !important; text-align: right !important; }
+.stButton > button { width: 100%; background-color: #1E3A8A; color: white; font-weight: bold; border-radius: 8px; }
+</style>
 """, unsafe_allow_html=True)
 
 try:
@@ -55,7 +45,4 @@ if (submit_button or user_query) and user_query:
     with st.spinner("جاري البحث..."):
         try:
             model = genai.GenerativeModel('gemini-1.5-flash')
-            prompt_text = (
-                "أنت مساعد أكاديمي لشؤون الطلبة في كليات الرؤية.\n"
-                "أجب بناء على النص المرفق فقط. اذا المعلومة غير موجودة قل: عذرا، هذه المعلومة غير مذكورة في اللائحة الأكاديمية المرفقة.\n\n"
-                f"النص:\n
+            prompt_text
