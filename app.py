@@ -15,7 +15,7 @@ html, body, [class*="css"] { direction: rtl !important; text-align: right !impor
 try:
     API_KEY = st.secrets["GEMINI_API_KEY"]
     genai.configure(api_key=API_KEY)
-except:
+except Exception:
     st.error("اضف GEMINI_API_KEY في Secrets")
     st.stop()
 
@@ -23,18 +23,20 @@ except:
 def load_all_documents():
     txt = ""
     for file in os.listdir('.'):
-        if file.startswith('.'): continue
+        if file.startswith('.'):
+            continue
         if file.endswith('.pdf'):
             try:
                 reader = pypdf.PdfReader(file)
                 for page in reader.pages:
                     t = page.extract_text()
-                    if t: txt += t + "\n"
-            except: pass
+                    if t:
+                        txt += t + "\n"
+            except:
+                pass
     return txt.strip()
 
 context = load_all_documents()
-
 st.title("كليات الرؤية - Vision Colleges")
 st.subheader("الإستفسار الآلي - وحدة شؤون الطلبة")
 
@@ -45,4 +47,10 @@ if (submit_button or user_query) and user_query:
     with st.spinner("جاري البحث..."):
         try:
             model = genai.GenerativeModel('gemini-1.5-flash')
-            prompt_text
+            base = "أنت مساعد أكاديمي لشؤون الطلبة في كليات الرؤية. أجب بناء على النص المرفق فقط."
+            prompt_text = base + "\n\nالنص:\n" + context + "\n\nسؤال الطالب:\n" + user_query
+            response = model.generate_content(prompt_text)
+            st.markdown("### الإجابة من واقع اللائحة:")
+            st.write(response.text)
+        except Exception as e:
+            st.error(str(e))
