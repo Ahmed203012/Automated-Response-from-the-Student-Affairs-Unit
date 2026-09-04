@@ -41,110 +41,6 @@ div[data-testid="stButton"] > button {
 """
 st.markdown(css_code, unsafe_allow_html=True)
 
-def fix_arabic_text(text):
-    if not text:
-        return text
-    text = text.replace("ـ", "")
-    try:
-        import arabic_reshaper
-        from bidi.algorithm import get_display
-        reshaped = arabic_reshaper.reshape(text)
-        bidi_text = get_display(reshaped)
-        return bidi_text
-    except:
-        return text
-
-def normalize_for_search(text):
-    if not text:
-        return ""
-    text = text.replace("ـ", "").replace("ة", "ه").replace("ى", "ي")
-    text = re.sub(r'[^\w\s]', ' ', text)
-    return text
-
-@st.cache_data
-def load_data():
-    chunks = []
-    try:
-        import fitz
-        for fname in os.listdir("."):
-            if fname.lower().endswith(".pdf"):
-                try:
-                    doc = fitz.open(fname)
-                    full = ""
-                    for page in doc:
-                        t = page.get_text("text")
-                        if t:
-                            full += "\n" + t
-                    words = full.split()
-                    cur = ""
-                    for w in words:
-                        cur += w + " "
-                        if len(cur) > 800:
-                            if len(cur.strip()) > 40:
-                                chunks.append(cur.strip())
-                            cur = ""
-                    if cur.strip():
-                        chunks.append(cur.strip())
-                except:
-                    pass
-        if chunks:
-            return chunks
-    except:
-        pass
-    try:
-        import pdfplumber
-        for fname in os.listdir("."):
-            if fname.lower().endswith(".pdf"):
-                try:
-                    with pdfplumber.open(fname) as pdf:
-                        full = ""
-                        for p in pdf.pages:
-                            t = p.extract_text()
-                            if t:
-                                full += "\n" + t
-                        words = full.split()
-                        cur = ""
-                        for w in words:
-                            cur += w + " "
-                            if len(cur) > 800:
-                                if len(cur.strip()) > 40:
-                                    chunks.append(cur.strip())
-                                cur = ""
-                        if cur.strip():
-                            chunks.append(cur.strip())
-                except:
-                    pass
-    except:
-        pass
-    return chunks
-
-ALL_CHUNKS = load_data()
-
-def get_context(q):
-    q_norm = normalize_for_search(q)
-    q_words = [w for w in q_norm.split() if len(w) > 2]
-    scored = []
-    for ch in ALL_CHUNKS:
-        ch_norm = normalize_for_search(ch)
-        score = 0
-        for qw in q_words:
-            base = qw.replace("ال", "")
-            if qw in ch_norm or base in ch_norm:
-                score += 1
-        if "عذر" in q_norm and "عذر" in ch_norm:
-            score += 5
-        if "وفاه" in q_norm and "وفاه" in ch_norm:
-            score += 5
-        if "غياب" in q_norm and "غياب" in ch_norm:
-            score += 3
-        if score > 0:
-            scored.append((score, ch))
-    scored.sort(key=lambda x: x[0], reverse=True)
-    if not scored:
-        return "\n".join(ALL_CHUNKS[:4])[:8000]
-    top = [c for s,c in scored[:4]]
-    return "\n".join(top)[:8000]
-
 col1, col2, col3 = st.columns([2, 1, 2])
 with col2:
     if os.path.exists("logo.png"):
@@ -161,22 +57,53 @@ btn = st.button("اضغط هنا للحصول على الإجابة")
 
 LINK = "https://elearning.vision.edu.sa/course/view.php?id=188"
 
+def find_best_pdfs(query, max_files=2):
+    pdfs = [f for f in os.listdir(".") if f.lower().endswith(".pdf")]
+    if not pdfs:
+        return []
+    q = query.lower()
+    scored = []
+    for pdf in pdfs:
+        score = 0
+        name = pdf.lower()
+        if "عذر" in q or "غياب" in q:
+            if "عذر" in name or "لائحة" in name or "دليل" in name:
+                score += 10
+        if "وفاة" in q and "عذر" in name:
+            score += 10
+        scored.append((score, pdf))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    if scored[0][0] == 0:
+        return pdfs[:max_files]
+    return [p for s,p in scored[:max_files]]
+
 if btn and user_query:
-    raw_context = get_context(user_query)
-    fixed_context = fix_arabic_text(raw_context)
+    best_pdfs = find_best_pdfs(user_query)
     ans = ""
     try:
         from google import genai
+        from google.genai import types
         API_KEY = st.secrets["GEMINI_API_KEY"]
         client = genai.Client(api_key=API_KEY)
-        prompt_text = "انت مساعد في كليات الرؤية. اجب من اللوائح التالية باختصار واضح بالعربية الفصحى في نقاط مرتبة. اذا سئل عن المدة لعذر الوفاة اذكر المدة المسموحة. اللوائح: " + fixed_context + " السؤال: " + user_query
-        r = client.models.generate_content(model="gemini-2.0-flash", contents=prompt_text)
+        parts = []
+        for pdf_file in best_pdfs:
+            try:
+                with open(pdf_file, "rb") as f:
+                    pdf_bytes = f.read()
+                parts.append(types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"))
+            except:
+                pass
+        prompt = f"انت مساعد اكاديمي في كليات الرؤية بالرياض. اقرأ ملفات اللوائح المرفقة (PDF) واجب على هذا السؤال بالعربية الفصحى الواضحة في نقاط مرتبة: {user_query}. اذا كان السؤال عن عذر الوفاة اذكر المدة وطريقة التقديم والاوراق المطلوبة من اللائحة."
+        parts.append(types.Part.from_text(text=prompt))
+        r = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=[types.Content(role="user", parts=parts)]
+        )
         ans = r.text
-        ans = fix_arabic_text(ans)
     except Exception as e:
-        ans = fixed_context[:3500]
-    if not ans or len(ans.strip()) < 10:
-        ans = fixed_context[:3500]
+        ans = f"حدث خطأ في قراءة اللوائح: {str(e)[:300]}"
+    if not ans or len(ans.strip()) < 5:
+        ans = "عذرا، لم اتمكن من قراءة اللوائح. يرجى اعادة صياغة السؤال."
     st.markdown("<div class='answer-box'>" + ans + "</div>", unsafe_allow_html=True)
     disc = "<div class='disclaimer-box'>تنويه: هذا برنامج رد آلي ويمكن ان تكون الاجابات في بعض الاحيان غير دقيقة، وعليه تعتبر اللوائح والانظمة الرسمية المعتمدة والمعلنة عبر الرابط التالي هي المرجع المعتمد والاخير للكلية:<br><a href='" + LINK + "' target='_blank'>" + LINK + "</a></div>"
     st.markdown(disc, unsafe_allow_html=True)
