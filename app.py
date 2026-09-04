@@ -23,14 +23,17 @@ except Exception:
 def load_all_documents():
     txt = ""
     for file in os.listdir('.'):
-        if file.startswith('.'): continue
+        if file.startswith('.'):
+            continue
         if file.endswith('.pdf'):
             try:
                 reader = pypdf.PdfReader(file)
                 for page in reader.pages:
                     t = page.extract_text()
-                    if t: txt += t + "\n"
-            except: pass
+                    if t:
+                        txt += t + "\n"
+            except:
+                pass
     return txt.strip()
 
 context = load_all_documents()
@@ -47,10 +50,10 @@ if (submit_button or user_query) and user_query:
             full_prompt = base + "\n\nالنص:\n" + context + "\n\nسؤال الطالب:\n" + user_query
             
             response = client.models.generate_content(
-                model="gemini-2.0-flash",
+                model="gemini-1.5-flash",
                 contents=full_prompt
             )
             st.markdown("### الإجابة من واقع اللائحة:")
             st.write(response.text)
         except Exception as e:
-            st.error(str(e))
+            st.error(str(e
