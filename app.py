@@ -2,7 +2,6 @@ import os
 import sys
 import subprocess
 
-# تثبيت المكتبة الجديدة الرسمية بدلاً من القديمة
 try:
     from google import genai
 except ImportError:
@@ -17,10 +16,8 @@ except ImportError:
 
 import streamlit as st
 
-# ضبط إعدادات الصفحة
 st.set_page_config(page_title="كليات الرؤية - Vision Colleges", layout="centered")
 
-# إدراج تنسيق CSS لدعم اللغة العربية
 st.markdown("""
     <style>
     html, body, [class*="css"], div, p, span, input, button, label {
@@ -64,10 +61,9 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# وضع مفتاح AQ الخاص بك هنا
-API_KEY = "AQ.Ab8RN6IBphqiJpSx0dfnPS-NWXbQXTKG7EVQZB7BaUI3b0bvSg"
+# وضع المفتاح هنا خارج تنسيقات CSS
+API_KEY = "AQ.Ab8RN6KRoNXv8ScljVw_JzWyrrFmiPZtuZzyCwEhxPgOsmXG7w"
 
-# تهيئة العميل بالمكتبة الجديدة لدعم مفاتيح AQ
 client = genai.Client(api_key=API_KEY)
 
 @st.cache_data
