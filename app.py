@@ -61,7 +61,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # مفتاح الـ API الثابت الخاص بك الذي تبين أنه يبدأ بـ AQ في شاشتك
-API_KEY = "AQ.Ab8RN6Lg3ba1upRsr-04ug-Qqp4Nvl8clIYmuGzWaw22x..." # ضع المفتاح الكامل هنا
+API_KEY = "AQ.Ab8RN6Lg3ba1upRsr-04ug-Qqp4NvI8cIIYmuGzWaw22xHW8Qg" 
 
 @st.cache_data
 def load_all_documents():
