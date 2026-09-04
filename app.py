@@ -2,12 +2,12 @@ import os
 import sys
 import subprocess
 
-# تثبيت المكتبات تلقائياً إذا لم تكن موجودة في السيرفر
+# تثبيت المكتبة الجديدة الرسمية بدلاً من القديمة
 try:
-    import google.generativeai as genai
+    from google import genai
 except ImportError:
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "google-generativeai"])
-    import google.generativeai as genai
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "google-genai"])
+    from google import genai
 
 try:
     import pypdf
@@ -20,7 +20,7 @@ import streamlit as st
 # ضبط إعدادات الصفحة
 st.set_page_config(page_title="كليات الرؤية - Vision Colleges", layout="centered")
 
-# إدراج تنسيق CSS لدعم اتجاه اللغة العربية من اليمين لليسار (RTL)
+# إدراج تنسيق CSS لدعم اللغة العربية
 st.markdown("""
     <style>
     html, body, [class*="css"], div, p, span, input, button, label {
@@ -64,10 +64,11 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# ضع مفتاح API الخاص بك كاملاً بين التنصيص
-API_KEY = "AQ.Ab8RN6Lg3ba1upRsr-04ug-Qqp4NvI8cIIYmuGzWaw22xHW8Qg" 
+# وضع مفتاح AQ الخاص بك هنا
+API_KEY = "AQ.Ab8RN6IBphqiJpSx0dfnPS-NWXbQXTKG7EVQZB7BaUI3b0bvSg"
 
-genai.configure(api_key=API_KEY)
+# تهيئة العميل بالمكتبة الجديدة لدعم مفاتيح AQ
+client = genai.Client(api_key=API_KEY)
 
 @st.cache_data
 def load_all_documents():
@@ -94,21 +95,16 @@ def load_all_documents():
 
 context = load_all_documents()
 
-# عرض شعار الكلية إذا كان مرفوعاً
 if os.path.exists("logo.png"):
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.image("logo.png", width=180)
 
-# العناوين الرئيسية
 st.title("كليات الرؤية - Vision Colleges")
 st.subheader("الإستفسار الآلي - وحدة شؤون الطلبة")
 st.write("أهلاً بك، يمكنك طرح أي سؤال متعلق باللوائح والتعليمات الأكاديمية.")
 
-# صندوق إدخال السؤال
 user_query = st.text_input("اسأل سؤالك هنا:")
-
-# زر إرسال السؤال
 submit_button = st.button("اضغط هنا للحصول على الإجابة")
 
 if (submit_button or user_query) and user_query:
@@ -117,8 +113,6 @@ if (submit_button or user_query) and user_query:
     else:
         with st.spinner("جاري البحث داخل اللائحة المرفقة..."):
             try:
-                model = genai.GenerativeModel('gemini-1.5-flash')
-
                 strict_prompt = f"""
 أنت مساعد أكاديمي لشؤون الطلبة في كليات الرؤية.
 
@@ -133,7 +127,10 @@ if (submit_button or user_query) and user_query:
 {user_query}
 """
 
-                response = model.generate_content(strict_prompt)
+                response = client.models.generate_content(
+                    model='gemini-2.5-flash',
+                    contents=strict_prompt,
+                )
                 
                 st.markdown("### الإجابة من واقع اللائحة:")
                 st.write(response.text)
