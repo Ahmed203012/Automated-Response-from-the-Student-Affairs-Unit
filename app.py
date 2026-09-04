@@ -69,8 +69,6 @@ def find_best_pdfs(query, max_files=2):
         if "عذر" in q or "غياب" in q:
             if "عذر" in name or "لائحة" in name or "دليل" in name:
                 score += 10
-        if "وفاة" in q and "عذر" in name:
-            score += 10
         scored.append((score, pdf))
     scored.sort(key=lambda x: x[0], reverse=True)
     if scored[0][0] == 0:
@@ -80,6 +78,8 @@ def find_best_pdfs(query, max_files=2):
 if btn and user_query:
     best_pdfs = find_best_pdfs(user_query)
     ans = ""
+    last_error = ""
+    models_to_try = ["gemini-1.5-flash", "gemini-2.5-flash", "gemini-2.0-flash-exp", "gemini-1.5-flash-8b"]
     try:
         from google import genai
         from google.genai import types
@@ -93,17 +93,25 @@ if btn and user_query:
                 parts.append(types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"))
             except:
                 pass
-        prompt = f"انت مساعد اكاديمي في كليات الرؤية بالرياض. اقرأ ملفات اللوائح المرفقة (PDF) واجب على هذا السؤال بالعربية الفصحى الواضحة في نقاط مرتبة: {user_query}. اذا كان السؤال عن عذر الوفاة اذكر المدة وطريقة التقديم والاوراق المطلوبة من اللائحة."
+        prompt = f"انت مساعد اكاديمي في كليات الرؤية بالرياض. اقرأ ملفات اللوائح المرفقة واجب على هذا السؤال بالعربية الفصحى الواضحة في نقاط مرتبة: {user_query}. اذا كان السؤال عن عذر الوفاة اذكر المدة وطريقة التقديم والاوراق المطلوبة."
         parts.append(types.Part.from_text(text=prompt))
-        r = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=[types.Content(role="user", parts=parts)]
-        )
-        ans = r.text
+        for model_name in models_to_try:
+            try:
+                r = client.models.generate_content(
+                    model=model_name,
+                    contents=[types.Content(role="user", parts=parts)]
+                )
+                if r and r.text and len(r.text.strip()) > 10:
+                    ans = r.text
+                    break
+            except Exception as e:
+                last_error = str(e)
+                continue
     except Exception as e:
-        ans = f"حدث خطأ في قراءة اللوائح: {str(e)[:300]}"
-    if not ans or len(ans.strip()) < 5:
-        ans = "عذرا، لم اتمكن من قراءة اللوائح. يرجى اعادة صياغة السؤال."
+        last_error = str(e)
+        ans = ""
+    if not ans:
+        ans = f"عذرا، حدث خطأ مؤقت في قراءة اللوائح. (التفاصيل: {last_error[:400]}). يرجى المحاولة مرة اخرى."
     st.markdown("<div class='answer-box'>" + ans + "</div>", unsafe_allow_html=True)
     disc = "<div class='disclaimer-box'>تنويه: هذا برنامج رد آلي ويمكن ان تكون الاجابات في بعض الاحيان غير دقيقة، وعليه تعتبر اللوائح والانظمة الرسمية المعتمدة والمعلنة عبر الرابط التالي هي المرجع المعتمد والاخير للكلية:<br><a href='" + LINK + "' target='_blank'>" + LINK + "</a></div>"
     st.markdown(disc, unsafe_allow_html=True)
