@@ -27,6 +27,7 @@ div[data-testid="stButton"] > button {
     border-radius: 12px;
     line-height: 2;
     border: 1px solid #c3e6cb;
+    font-size: 17px;
 }
 .disclaimer-box {
     background-color: #fef9e7;
@@ -53,6 +54,7 @@ def load_data():
                     for page in pdf.pages:
                         t = page.extract_text()
                         if t and len(t.strip()) > 30:
+                            t = t.replace("ـ", "")
                             chunks.append(t)
             except:
                 pass
@@ -78,14 +80,14 @@ def get_context(q):
         result = result + "\n" + f
     return result[:6000]
 
-col1, col2, col3 = st.columns([1, 2, 1])
+col1, col2, col3 = st.columns([2, 1, 2])
 with col2:
     if os.path.exists("logo.png"):
-        st.image("logo.png", use_container_width=True)
+        st.image("logo.png", width=130)
     elif os.path.exists("Logo.png"):
-        st.image("Logo.png", use_container_width=True)
+        st.image("Logo.png", width=130)
 
-st.markdown("<h1 style='text-align:center;'>Vision Colleges - كليات الرؤية</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align:center;'>كليات الرؤية - Vision Colleges</h1>", unsafe_allow_html=True)
 st.markdown("<h3 style='text-align:right;'>الاستفسار الآلي - وحدة شؤون الطلبة</h3>", unsafe_allow_html=True)
 st.write("مرحبا بكم في كلية الرؤية بالرياض، نرحب باستفساراتكم حول لوائح وأنظمة الكلية.")
 
@@ -98,12 +100,19 @@ if btn and user_query:
     context_text = get_context(user_query)
     ans = ""
     try:
-        prompt_text = "اجب باختصار ووضوح من اللوائح التالية فقط. اللوائح: " + context_text + " السؤال: " + user_query
-        r = client.models.generate_content(model="gemini-2.0-flash", contents=prompt_text)
+        prompt_text = "انت مساعد اكاديمي في كلية الرؤية. اعد صياغة الاجابة التالية بلغة عربية واضحة ومفهومة ومرتبة في نقاط. لا تترك النص معكوس او غير مقروء. اللوائح: " + context_text + " السؤال: " + user_query
+        r = client.models.generate_content(model="gemini-1.5-flash", contents=prompt_text)
         ans = r.text
-    except:
-        ans = context_text[:2000]
-    if not ans:
+        if not ans:
+            raise Exception("empty")
+    except Exception as e:
+        try:
+            prompt_text2 = "لخص هذه اللوائح باختصار واضح بالعربية: " + context_text
+            r2 = client.models.generate_content(model="gemini-2.0-flash", contents=prompt_text2)
+            ans = r2.text
+        except:
+            ans = "عذرا، لم يتم العثور على اجابة واضحة في اللوائح لهذا السؤال. يرجى اعادة صياغة السؤال او مراجعة اللوائح عبر الرابط الرسمي ادناه."
+    if not ans or len(ans.strip()) < 5:
         ans = "عذرا، هذه المعلومة غير متوفرة في اللوائح."
     st.markdown("<div class='answer-box'>" + ans + "</div>", unsafe_allow_html=True)
     disc = "<div class='disclaimer-box'>تنويه: هذا برنامج رد آلي ويمكن ان تكون الاجابات في بعض الاحيان غير دقيقة، وعليه تعتبر اللوائح والانظمة الرسمية المعتمدة والمعلنة عبر الرابط التالي هي المرجع المعتمد والاخير للكلية:<br><a href='" + LINK + "' target='_blank'>" + LINK + "</a></div>"
