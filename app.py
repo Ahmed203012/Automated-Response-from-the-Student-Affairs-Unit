@@ -111,7 +111,7 @@ if (submit_button or user_query) and user_query:
     else:
         with st.spinner("جاري البحث داخل اللائحة المرفقة..."):
             try:
-                client = genai.Client(api_key=API_KEY)
+              client = genai.Client(credentials=API_KEY)
                 
                 strict_prompt = f"""
 أنت مساعد أكاديمي لشؤون الطلبة في كليات الرؤية.
