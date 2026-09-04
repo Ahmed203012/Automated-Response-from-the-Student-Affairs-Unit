@@ -56,9 +56,30 @@ btn = st.button("اضغط هنا للحصول على الإجابة")
 
 LINK = "https://elearning.vision.edu.sa/course/view.php?id=188"
 
-def find_best_pdfs(query, max_files=3):
+def find_best_pdfs(query):
     pdfs = [f for f in os.listdir(".") if f.lower().endswith(".pdf")]
-    return pdfs[:max_files]
+    if not pdfs:
+        return []
+    q = query.lower()
+    scored = []
+    for pdf in pdfs:
+        name = pdf.lower()
+        score = 0
+        if "عذر" in name or "الاعذار" in name or "اعذار" in name:
+            score += 100
+        if "ضوابط" in name and "الطالبية" in name:
+            score += 100
+        if "وفاة" in q or "وفاه" in q:
+            if "عذر" in name or "اعذار" in name:
+                score += 200
+        if "لائحة" in name or "قواعد" in name:
+            score += 5
+        scored.append((score, pdf))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    top = [p for s,p in scored[:2]]
+    if not top:
+        top = pdfs[:2]
+    return top
 
 if btn and user_query:
     best_pdfs = find_best_pdfs(user_query)
@@ -84,15 +105,11 @@ if btn and user_query:
             except:
                 pass
         prompt = f"""
-انت مساعد اكاديمي دقيق في كليات الرؤية بالرياض. اقرأ كل ملفات اللوائح المرفقة بعناية.
-السؤال الحالي هو: "{user_query}"
-تعليمات مهمة جدا:
-1. اذا كان السؤال عن "عذر الوفاة" فلا تجب عن عذر الغياب عن الاختبار. عذر الوفاة له احكام خاصة: مدة الغياب المسموحة بسبب وفاة قريب (عادة 5 ايام)، ومدة تقديم العذر (عادة 7 ايام او 5 ايام)، وفترة تسليم المستندات. ابحث عن فقرة "حالات الوفاة" او "عذر الوفاة" تحديدا.
-2. اذا كان السؤال عن "الغياب عن الاختبار" فالمدة هي 3 ايام.
-3. يجب ان تذكر المدة الصحيحة لعذر الوفاة كما وردت في اللائحة: كم يوم مدة الغياب، وكم يوم مهلة تقديم العذر.
-4. اذا وجدت فقرة عذر الوفاة اذكرها بنصها مع الفقرة.
-5. اجب بالعربية الفصحى الواضحة في نقاط.
-اللوائح المرفقة هي المرجع الوحيد.
+انت مساعد اكاديمي دقيق جدا في كليات الرؤية بالرياض.
+السؤال: "{user_query}"
+انت الان تقرأ تحديدا ملف "ضوابط الأعذار الطلابية في كلية الرؤية بالرياض" المرفق. هذا الملف يحتوي على:
+- ت) حالات الوفاة: يقبل العذر في حالة وفاة أحد الأقارب من الدرجة الأولى (الوالدان وإن علا، الأبناء، الزوج، الزوجة، الإخوة) فقط، يمنح الطالب إجازة لمدة خمسة أيام كحد أقصى تبدأ من تاريخ الوفاة، تقديم ما يثبت الوفاة (شهادة الوفاة) خلال أسبوع عمل من تاريخ الوفاة.
+مهمتك: اذا كان السؤال عن عذر الوفاة، اذكر بالضبط: مدة الإجازة 5 أيام، ومهلة تقديم ما يثبت الوفاة خلال أسبوع عمل من تاريخ الوفاة، ومن هم الأقارب المشمولون. لا تخلط بين عذر الاختبار (3 أيام) وعذر الوفاة (5 أيام + أسبوع).
 """
         parts.append(types.Part.from_text(text=prompt))
         for model_name in all_to_try:
@@ -101,7 +118,7 @@ if btn and user_query:
                     model=model_name,
                     contents=[types.Content(role="user", parts=parts)]
                 )
-                if r and r.text and len(r.text.strip()) > 15:
+                if r and r.text and len(r.text.strip()) > 20:
                     ans = r.text
                     break
             except:
