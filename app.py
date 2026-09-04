@@ -3,7 +3,7 @@ import streamlit as st
 import pdfplumber
 from google import genai
 
-st.set_page_config(page_title="كليات الرؤية", layout="centered", page_icon="🎓")
+st.set_page_config(page_title="Vision Colleges", layout="centered", page_icon=":mortar_board:")
 
 st.markdown("""
 <style>
@@ -21,7 +21,7 @@ try:
     API_KEY = st.secrets["GEMINI_API_KEY"]
     client = genai.Client(api_key=API_KEY)
 except:
-    st.error("أضف GEMINI_API_KEY في Secrets")
+    st.error("Add GEMINI_API_KEY in Secrets")
     st.stop()
 
 @st.cache_data(show_spinner=False)
@@ -29,7 +29,8 @@ def load_text():
     full = ""
     chunks = []
     for file in os.listdir('.'):
-        if not file.endswith('.pdf'): continue
+        if not file.lower().endswith('.pdf'):
+            continue
         try:
             with pdfplumber.open(file) as pdf:
                 for page in pdf.pages:
@@ -37,38 +38,10 @@ def load_text():
                     if len(t.strip()) > 20:
                         full += "\n" + t + "\n"
                         chunks.append(t)
-        except: pass
+        except:
+            pass
     return full, chunks
 
 full_text, all_chunks = load_text()
 
-def get_context(query):
-    q = query.replace("ة","ه").replace("أ","ا").replace("إ","ا")
-    best = []
-    for ch in all_chunks:
-        ch_norm = ch.replace("ة","ه").replace("أ","ا")
-        if any(word in ch_norm for word in q.split() if len(word)>2):
-            best.append(ch)
-    if not best:
-        best = all_chunks[:6]
-    text = "\n".join(best[:6])
-    return text[:15000]
-
-logo_file = None
-for name in ["logo.png", "Logo.png", "LOGO.PNG"]:
-    if os.path.exists(name):
-        logo_file = name
-        break
-if logo_file:
-    col1, col2, col3 = st.columns([1,2,1])
-    with col2:
-        st.image(logo_file, width=160)
-
-st.markdown("<h1 style='text-align: right; color: #000000; margin-bottom:0; font-weight:800;'>كليات الرؤية - Vision Colleges</h1>", unsafe_allow_html=True)
-st.markdown("<h3 style='text-align: right; color: #000000; margin-top:6px; font-weight:700;'>الاستفسار الآلي - وحدة شؤون الطلبة</h3>", unsafe_allow_html=True)
-st.markdown("<p style='text-align:right; color:#555;'>كلية الرؤية بالرياض ترحب بكم، ويمكنكم طرح سؤالكم هنا وسيتم الرد من واقع اللوائح المعتمدة</p>", unsafe_allow_html=True)
-
-user_query = st.text_input(" ", placeholder="كلية الرؤية بالرياض ترحب بكم، يمكنكم طرح سؤالكم هنا")
-submit_button = st.button("اضغط هنا للحصول على الإجابة")
-
-DISCLAIMER_TEXT = "تنويه: هذا برنامج رد آ
+def get_context
