@@ -1,7 +1,7 @@
 import os
 import streamlit as st
 import pypdf
-from groq import Groq
+from google import genai
 
 st.set_page_config(page_title="Vision Colleges", layout="centered")
 
@@ -13,10 +13,10 @@ html, body, [class*="css"] { direction: rtl!important; text-align: right!importa
 """, unsafe_allow_html=True)
 
 try:
-    GROQ_KEY = st.secrets["GROQ_API_KEY"]
-    client = Groq(api_key=GROQ_KEY)
+    API_KEY = st.secrets["GEMINI_API_KEY"]
+    client = genai.Client(api_key=API_KEY)
 except Exception:
-    st.error("اضف GROQ_API_KEY في Secrets")
+    st.error("اضف GEMINI_API_KEY في Secrets")
     st.stop()
 
 @st.cache_data
@@ -34,7 +34,7 @@ def load_all_documents():
     return txt.strip()
 
 context = load_all_documents()
-st.title("كليات الرؤية - Vision Colleges")
+st.title("Vision Colleges - كليات الرؤية")
 st.subheader("الإستفسار الآلي - وحدة شؤون الطلبة")
 
 user_query = st.text_input("اسأل سؤالك هنا:")
@@ -45,13 +45,12 @@ if (submit_button or user_query) and user_query:
         try:
             base = "أنت مساعد أكاديمي لشؤون الطلبة في كليات الرؤية. أجب بناء على النص المرفق فقط."
             full_prompt = base + "\n\nالنص:\n" + context + "\n\nسؤال الطالب:\n" + user_query
-
-            completion = client.chat.completions.create(
-                model="llama-3.1-8b-instant",
-                messages=[{"role": "user", "content": full_prompt}],
-                temperature=0.2
+            
+            response = client.models.generate_content(
+                model="gemini-2.0-flash",
+                contents=full_prompt
             )
             st.markdown("### الإجابة من واقع اللائحة:")
-            st.write(completion.choices[0].message.content)
+            st.write(response.text)
         except Exception as e:
             st.error(str(e))
