@@ -1,17 +1,21 @@
-import streamlit as st
 import os
+import sys
+import subprocess
 
+# تثبيت المكتبات تلقائياً إذا لم تكن موجودة في السيرفر
 try:
     import google.generativeai as genai
 except ImportError:
-    os.system("pip install -q google-generativeai")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "google-generativeai"])
     import google.generativeai as genai
 
 try:
     import pypdf
 except ImportError:
-    os.system("pip install -q pypdf")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "pypdf"])
     import pypdf
+
+import streamlit as st
 
 # ضبط إعدادات الصفحة
 st.set_page_config(page_title="كليات الرؤية - Vision Colleges", layout="centered")
@@ -60,10 +64,9 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# مفتاح API الخاص بك
+# ضع مفتاح API الخاص بك كاملاً بين التنصيص
 API_KEY = "AQ.Ab8RN6Lg3ba1upRsr-04ug-Qqp4NvI8cIIYmuGzWaw22xHW8Qg" 
 
-# تهيئة المكتبة بالمفتاح
 genai.configure(api_key=API_KEY)
 
 @st.cache_data
