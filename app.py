@@ -49,7 +49,7 @@ if (submit_button or user_query) and user_query:
             base = "انت مساعد اكاديمي لشؤون الطلبة في كليات الرؤية. اجب بناء على النص المرفق فقط."
             full_prompt = base + "\n\nالنص:\n" + context + "\n\nسؤال الطالب:\n" + user_query
             response = client.models.generate_content(
-                model="gemini-1.5-flash",
+                model="gemini-2.5-flash",
                 contents=full_prompt
             )
             st.markdown("### الاجابة من واقع اللائحة:")
