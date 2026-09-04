@@ -1,8 +1,6 @@
 import os
-import streamlit as st
-import pdfplumber
-from google import genai
 import re
+import streamlit as st
 
 st.set_page_config(page_title="Vision Colleges", layout="centered")
 
@@ -26,9 +24,10 @@ div[data-testid="stButton"] > button {
     background-color: #eaf7f0;
     padding: 20px;
     border-radius: 12px;
-    line-height: 2;
+    line-height: 2.1;
     border: 1px solid #c3e6cb;
     font-size: 17px;
+    white-space: pre-wrap;
 }
 .disclaimer-box {
     background-color: #fef9e7;
@@ -42,10 +41,20 @@ div[data-testid="stButton"] > button {
 """
 st.markdown(css_code, unsafe_allow_html=True)
 
-API_KEY = st.secrets["GEMINI_API_KEY"]
-client = genai.Client(api_key=API_KEY)
+def fix_arabic_text(text):
+    if not text:
+        return text
+    text = text.replace("ـ", "")
+    try:
+        import arabic_reshaper
+        from bidi.algorithm import get_display
+        reshaped = arabic_reshaper.reshape(text)
+        bidi_text = get_display(reshaped)
+        return bidi_text
+    except:
+        return text
 
-def normalize_ar(text):
+def normalize_for_search(text):
     if not text:
         return ""
     text = text.replace("ـ", "").replace("ة", "ه").replace("ى", "ي")
@@ -55,60 +64,93 @@ def normalize_ar(text):
 @st.cache_data
 def load_data():
     chunks = []
-    for fname in os.listdir("."):
-        if fname.lower().endswith(".pdf"):
-            try:
-                with pdfplumber.open(fname) as pdf:
-                    full_text = ""
-                    for page in pdf.pages:
-                        t = page.extract_text()
+    try:
+        import fitz
+        for fname in os.listdir("."):
+            if fname.lower().endswith(".pdf"):
+                try:
+                    doc = fitz.open(fname)
+                    full = ""
+                    for page in doc:
+                        t = page.get_text("text")
                         if t:
-                            full_text += "\n" + t
-                    words = full_text.split()
-                    current = ""
+                            full += "\n" + t
+                    words = full.split()
+                    cur = ""
                     for w in words:
-                        current += w + " "
-                        if len(current) > 700:
-                            if len(current.strip()) > 50:
-                                chunks.append(current.strip())
-                            current = ""
-                    if current.strip():
-                        chunks.append(current.strip())
-            except:
-                pass
+                        cur += w + " "
+                        if len(cur) > 800:
+                            if len(cur.strip()) > 40:
+                                chunks.append(cur.strip())
+                            cur = ""
+                    if cur.strip():
+                        chunks.append(cur.strip())
+                except:
+                    pass
+        if chunks:
+            return chunks
+    except:
+        pass
+    try:
+        import pdfplumber
+        for fname in os.listdir("."):
+            if fname.lower().endswith(".pdf"):
+                try:
+                    with pdfplumber.open(fname) as pdf:
+                        full = ""
+                        for p in pdf.pages:
+                            t = p.extract_text()
+                            if t:
+                                full += "\n" + t
+                        words = full.split()
+                        cur = ""
+                        for w in words:
+                            cur += w + " "
+                            if len(cur) > 800:
+                                if len(cur.strip()) > 40:
+                                    chunks.append(cur.strip())
+                                cur = ""
+                        if cur.strip():
+                            chunks.append(cur.strip())
+                except:
+                    pass
+    except:
+        pass
     return chunks
 
 ALL_CHUNKS = load_data()
 
 def get_context(q):
-    q_norm = normalize_ar(q)
+    q_norm = normalize_for_search(q)
     q_words = [w for w in q_norm.split() if len(w) > 2]
     scored = []
     for ch in ALL_CHUNKS:
-        ch_norm = normalize_ar(ch)
+        ch_norm = normalize_for_search(ch)
         score = 0
         for qw in q_words:
-            if qw in ch_norm or qw.replace("ال", "") in ch_norm:
+            base = qw.replace("ال", "")
+            if qw in ch_norm or base in ch_norm:
                 score += 1
-            if "عذر" in qw and "عذر" in ch_norm:
-                score += 2
-            if "وفاه" in qw and "وفاه" in ch_norm:
-                score += 2
+        if "عذر" in q_norm and "عذر" in ch_norm:
+            score += 5
+        if "وفاه" in q_norm and "وفاه" in ch_norm:
+            score += 5
+        if "غياب" in q_norm and "غياب" in ch_norm:
+            score += 3
         if score > 0:
             scored.append((score, ch))
     scored.sort(key=lambda x: x[0], reverse=True)
     if not scored:
-        return "\n".join(ALL_CHUNKS[:3])[:8000]
+        return "\n".join(ALL_CHUNKS[:4])[:8000]
     top = [c for s,c in scored[:4]]
-    result = "\n".join(top)
-    return result[:8000]
+    return "\n".join(top)[:8000]
 
 col1, col2, col3 = st.columns([2, 1, 2])
 with col2:
     if os.path.exists("logo.png"):
-        st.image("logo.png", width=130)
+        st.image("logo.png", width=120)
     elif os.path.exists("Logo.png"):
-        st.image("Logo.png", width=130)
+        st.image("Logo.png", width=120)
 
 st.markdown("<h1 style='text-align:center;'>كليات الرؤية - Vision Colleges</h1>", unsafe_allow_html=True)
 st.markdown("<h3 style='text-align:right;'>الاستفسار الآلي - وحدة شؤون الطلبة</h3>", unsafe_allow_html=True)
@@ -120,26 +162,21 @@ btn = st.button("اضغط هنا للحصول على الإجابة")
 LINK = "https://elearning.vision.edu.sa/course/view.php?id=188"
 
 if btn and user_query:
-    context_text = get_context(user_query)
+    raw_context = get_context(user_query)
+    fixed_context = fix_arabic_text(raw_context)
     ans = ""
-    error_msg = ""
     try:
-        prompt_text = "انت مساعد اكاديمي في كليات الرؤية. استخرج الاجابة بدقة من اللوائح التالية. اذا كان السؤال عن الاعذار الطلابية او عذر الوفاة فابحث عن المدة والضوابط. اجب بالعربية الواضحة في نقاط. اللوائح: " + context_text + " السؤال: " + user_query
+        from google import genai
+        API_KEY = st.secrets["GEMINI_API_KEY"]
+        client = genai.Client(api_key=API_KEY)
+        prompt_text = "انت مساعد في كليات الرؤية. اجب من اللوائح التالية باختصار واضح بالعربية الفصحى في نقاط مرتبة. اذا سئل عن المدة لعذر الوفاة اذكر المدة المسموحة. اللوائح: " + fixed_context + " السؤال: " + user_query
         r = client.models.generate_content(model="gemini-2.0-flash", contents=prompt_text)
         ans = r.text
+        ans = fix_arabic_text(ans)
     except Exception as e:
-        error_msg = str(e)
-        try:
-            r2 = client.models.generate_content(model="gemini-1.5-flash", contents=prompt_text)
-            ans = r2.text
-        except Exception as e2:
-            error_msg = str(e2)
-            ans = ""
+        ans = fixed_context[:3500]
     if not ans or len(ans.strip()) < 10:
-        if len(context_text.strip()) > 20:
-            ans = "من واقع لوائح الكلية:\n\n" + context_text[:3000]
-        else:
-            ans = "عذرا، لم يتم العثور على اجابة واضحة. (خطأ: " + error_msg[:200] + ")"
+        ans = fixed_context[:3500]
     st.markdown("<div class='answer-box'>" + ans + "</div>", unsafe_allow_html=True)
     disc = "<div class='disclaimer-box'>تنويه: هذا برنامج رد آلي ويمكن ان تكون الاجابات في بعض الاحيان غير دقيقة، وعليه تعتبر اللوائح والانظمة الرسمية المعتمدة والمعلنة عبر الرابط التالي هي المرجع المعتمد والاخير للكلية:<br><a href='" + LINK + "' target='_blank'>" + LINK + "</a></div>"
     st.markdown(disc, unsafe_allow_html=True)
