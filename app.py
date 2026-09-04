@@ -37,38 +37,18 @@ def get_context(q):
                 break
     if not found:
         found = ALL_CHUNKS[:2]
-    return "\n".join(found)[:6000]
+    txt = ""
+    for f in found:
+        txt = txt + "\n" + f
+    return txt[:6000]
 
 if os.path.exists("logo.png"):
     c1,c2,c3 = st.columns([1,2,1])
-    with c2: st.image("logo.png", width=150)
+    with c2:
+        st.image("logo.png", width=150)
 elif os.path.exists("Logo.png"):
     c1,c2,c3 = st.columns([1,2,1])
-    with c2: st.image("Logo.png", width=150)
+    with c2:
+        st.image("Logo.png", width=150)
 
-st.markdown("<h1 style='text-align:right;color:#000;margin-bottom:0;'>Vision Colleges - كليات الرؤية</h1>", unsafe_allow_html=True)
-st.markdown("<h3 style='text-align:right;color:#000;margin-top:5px;'>الاستفسار الآلي - وحدة شؤون الطلبة</h3>", unsafe_allow_html=True)
-
-# العبارة الترحيبية الحلوة التي طلبتها
-st.markdown("<p style='text-align:right;color:#444;font-size:16px;line-height:1.8;margin-top:10px;'>مرحباً بكم في كلية الرؤية بالرياض، نرحب باستفساراتكم حول لوائح وأنظمة الكلية، يمكنكم طرح أي سؤال وسيتم الرد عليكم مباشرة من واقع اللوائح المعتمدة.</p>", unsafe_allow_html=True)
-
-user_query = st.text_input(" ", placeholder="اكتب سؤالك هنا - مثلا: ما هو وكيل الكلية؟")
-btn = st.button("اضغط هنا للحصول على الاجابة")
-
-LINK = "https://elearning.vision.edu.sa/course/view.php?id=188"
-DISCLAIMER_HTML = f"تنويه: هذا برنامج رد آلي ويمكن ان تكون الاجابات في بعض الاحيان غير دقيقة، وعليه تعتبر اللوائح والانظمة الرسمية المعتمدة والمعلنة عبر الرابط التالي هي المرجع المعتمد والاخير للكلية: <br><a href='{LINK}' target='_blank' style='color:#000;font-weight:bold;word-break:break-all;'>{LINK}</a>"
-
-if btn and user_query:
-    ctx = get_context(user_query)
-    ans = ""
-    try:
-        prompt = "اجب فقط من هذه اللوائح. اذا غير موجود قل غير موجود.\n\n" + ctx + "\n\nالسؤال: " + user_query
-        r = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
-        ans = r.text
-    except:
-        ans = "من واقع اللوائح المرفقة:\n\n" + ctx[:1500]
-
-    if not ans:
-        ans = "عذرا، هذه المعلومة غير متوفرة في اللوائح المرفقة حاليا."
-
-    st.markdown(f"<div style='background:#FFF9E6;border-right:6px solid #C9A
+st.markdown("<h1 style='text-align:right;color:#000;margin-bottom
