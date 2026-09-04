@@ -19,20 +19,15 @@ st.set_page_config(page_title="كليات الرؤية - Vision Colleges", layou
 # إدراج تنسيق CSS لدعم اتجاه اللغة العربية من اليمين لليسار (RTL)
 st.markdown("""
     <style>
-    /* تطبيق محاذاة اليمين على الصفحة كاملة */
     html, body, [class*="css"], div, p, span, input, button, label {
         direction: rtl !important;
         text-align: right !important;
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     }
-    
-    /* محاذاة صندوق النص والزر */
     .stTextInput > div > div > input {
         text-align: right !important;
         direction: rtl !important;
     }
-    
-    /* تنسيق زر الإجابة */
     .stButton > button {
         width: 100%;
         background-color: #1E3A8A;
@@ -47,14 +42,23 @@ st.markdown("""
         background-color: #1D4ED8;
         color: white;
     }
-    
-    /* محاذاة عناوين الإجابات */
     .stAlert, .stMarkdown {
         text-align: right !important;
         direction: rtl !important;
     }
+    .disclaimer-box {
+        background-color: #F3F4F6;
+        border-right: 4px solid #1E3A8A;
+        padding: 12px 15px;
+        border-radius: 6px;
+        margin-top: 20px;
+        font-size: 14px;
+        color: #374151;
+        direction: rtl !important;
+        text-align: right !important;
+    }
     </style>
-""", unsafe_unsafe_html=True)
+""", unsafe_allow_html=True)
 
 API_KEY = "AQ.Ab8RN6KzXlK-oCzASuzgsAfBGCdHDEypywVfasmG79T4vOtVCQ"
 
@@ -97,7 +101,7 @@ st.write("أهلاً بك، يمكنك طرح أي سؤال متعلق بالل�
 # صندوق إدخال السؤال
 user_query = st.text_input("اسأل سؤالك هنا:")
 
-# زر إرسال السؤال بالنص الجديد
+# زر إرسال السؤال
 submit_button = st.button("اضغط هنا للحصول على الإجابة")
 
 if (submit_button or user_query) and user_query:
@@ -127,5 +131,15 @@ if (submit_button or user_query) and user_query:
                 
                 st.markdown("### الإجابة من واقع اللائحة:")
                 st.write(response.text)
+                
+                # التنويه الإجباري مع كل إجابة بتنسيق يمين إلى يسار
+                disclaimer_html = """
+                <div class="disclaimer-box">
+                    <strong>تنويه:</strong> هذا برنامج رد آلي ويمكن أن تكون الإجابات في بعض الأحيان غير دقيقة، وعليه تعتبر اللوائح والأنظمة الرسمية المعتمدة والمعلنة عبر الرابط التالي هي المرجع المعتمد والأخير للكلية: 
+                    <a href="https://elearning.vision.edu.sa/course/view.php?id=188" target="_blank" style="color: #1E3A8A; word-break: break-all;">https://elearning.vision.edu.sa/course/view.php?id=188</a>
+                </div>
+                """
+                st.markdown(disclaimer_html, unsafe_allow_html=True)
+                
             except Exception as e:
                 st.error(f"حدث خطأ أثناء الاستعلام: {e}")
