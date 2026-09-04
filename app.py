@@ -60,8 +60,8 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# المفتاح الخاص بك
-API_KEY = "AQ.Ab8RN6IIn4thJ1kRjTQUkhrYrv6YRaDcplGQ3CA3bNqROmfefA"
+# مفتاح الـ API الثابت الخاص بك الذي تبين أنه يبدأ بـ AQ في شاشتك
+API_KEY = "AQ.Ab8RN6Lg3ba1upRsr-04ug-Qqp4Nvl8clIYmuGzWaw22x..." # ضع المفتاح الكامل هنا
 
 @st.cache_data
 def load_all_documents():
@@ -111,6 +111,7 @@ if (submit_button or user_query) and user_query:
     else:
         with st.spinner("جاري البحث داخل اللائحة المرفقة..."):
             try:
+                # التهيئة الصحيحة باستخدام api_key
                 client = genai.Client(api_key=API_KEY)
 
                 strict_prompt = f"""
@@ -135,7 +136,7 @@ if (submit_button or user_query) and user_query:
                 st.markdown("### الإجابة من واقع اللائحة:")
                 st.write(response.text)
                 
-                # التنويه الإجباري مع كل إجابة بتنسيق يمين إلى يسار
+                # التنويه الإجباري مع كل إجابة
                 disclaimer_html = """
                 <div class="disclaimer-box">
                     <strong>تنويه:</strong> هذا برنامج رد آلي ويمكن أن تكون الإجابات في بعض الأحيان غير دقيقة، وعليه تعتبر اللوائح والأنظمة الرسمية المعتمدة والمعلنة عبر الرابط التالي هي المرجع المعتمد والأخير للكلية: 
