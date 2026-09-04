@@ -15,7 +15,7 @@ html, body, [class*="css"] { direction: rtl!important; text-align: right!importa
 try:
     API_KEY = st.secrets["GEMINI_API_KEY"]
     client = genai.Client(api_key=API_KEY)
-except Exception:
+except:
     st.error("اضف GEMINI_API_KEY في Secrets")
     st.stop()
 
@@ -38,22 +38,21 @@ def load_all_documents():
 
 context = load_all_documents()
 st.title("Vision Colleges - كليات الرؤية")
-st.subheader("الإستفسار الآلي - وحدة شؤون الطلبة")
+st.subheader("الاستفسار الالي - وحدة شؤون الطلبة")
 
 user_query = st.text_input("اسأل سؤالك هنا:")
-submit_button = st.button("اضغط هنا للحصول على الإجابة")
+submit_button = st.button("اضغط هنا للحصول على الاجابة")
 
 if (submit_button or user_query) and user_query:
     with st.spinner("جاري البحث..."):
         try:
-            base = "أنت مساعد أكاديمي لشؤون الطلبة في كليات الرؤية. أجب بناء على النص المرفق فقط."
+            base = "انت مساعد اكاديمي لشؤون الطلبة في كليات الرؤية. اجب بناء على النص المرفق فقط."
             full_prompt = base + "\n\nالنص:\n" + context + "\n\nسؤال الطالب:\n" + user_query
-            
             response = client.models.generate_content(
                 model="gemini-1.5-flash",
                 contents=full_prompt
             )
-            st.markdown("### الإجابة من واقع اللائحة:")
+            st.markdown("### الاجابة من واقع اللائحة:")
             st.write(response.text)
         except Exception as e:
-            st.error(str(e
+            st.error(str(e))
