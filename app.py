@@ -33,11 +33,11 @@ def get_context(q):
     for ch in ALL_CHUNKS:
         if any(w in ch for w in q2.split() if len(w) > 2):
             found.append(ch)
-            if len(found) >= 3:
+            if len(found) >= 2:
                 break
     if not found:
-        found = ALL_CHUNKS[:3]
-    return "\n".join(found)[:8000]
+        found = ALL_CHUNKS[:2]
+    return "\n".join(found)[:6000]
 
 if os.path.exists("logo.png"):
     c1,c2,c3 = st.columns([1,2,1])
@@ -49,22 +49,26 @@ elif os.path.exists("Logo.png"):
 st.markdown("<h1 style='text-align:right;color:#000;margin-bottom:0;'>Vision Colleges - كليات الرؤية</h1>", unsafe_allow_html=True)
 st.markdown("<h3 style='text-align:right;color:#000;margin-top:5px;'>الاستفسار الآلي - وحدة شؤون الطلبة</h3>", unsafe_allow_html=True)
 
-user_query = st.text_input(" ", placeholder="اكتب سؤالك هنا")
+# العبارة الترحيبية الحلوة التي طلبتها
+st.markdown("<p style='text-align:right;color:#444;font-size:16px;line-height:1.8;margin-top:10px;'>مرحباً بكم في كلية الرؤية بالرياض، نرحب باستفساراتكم حول لوائح وأنظمة الكلية، يمكنكم طرح أي سؤال وسيتم الرد عليكم مباشرة من واقع اللوائح المعتمدة.</p>", unsafe_allow_html=True)
+
+user_query = st.text_input(" ", placeholder="اكتب سؤالك هنا - مثلا: ما هو وكيل الكلية؟")
 btn = st.button("اضغط هنا للحصول على الاجابة")
 
 LINK = "https://elearning.vision.edu.sa/course/view.php?id=188"
 DISCLAIMER_HTML = f"تنويه: هذا برنامج رد آلي ويمكن ان تكون الاجابات في بعض الاحيان غير دقيقة، وعليه تعتبر اللوائح والانظمة الرسمية المعتمدة والمعلنة عبر الرابط التالي هي المرجع المعتمد والاخير للكلية: <br><a href='{LINK}' target='_blank' style='color:#000;font-weight:bold;word-break:break-all;'>{LINK}</a>"
 
 if btn and user_query:
-    with st.spinner("جاري البحث..."):
-        ctx = get_context(user_query)
-        prompt = "انت مساعد كليات الرؤية. اجب فقط من اللوائح. اذا لا يوجد قل: عذرا غير موجود في اللوائح.\n\nاللوائح:\n" + ctx + "\n\nالسؤال: " + user_query
-        try:
-            r = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
-            ans = r.text if r.text else "عذرا، هذه المعلومة غير متوفرة في اللوائح المرفقة حاليا."
-        except Exception as e:
-            ans = "عذرا، حدث خطأ مؤقت، حاول مرة اخرى."
-        
-        st.markdown(f"<div style='background:#FFF9E6;border-right:6px solid #C9A86A;padding:16px;border-radius:10px;margin-top:15px;text-align:right;direction:rtl;'>{ans}</div>", unsafe_allow_html=True)
-        # الرابط جوة صندوق التنويه نفسه
-        st.markdown(f"<div style='background:#FFF8D6;border:1px solid #C9A86A;padding:14px;border-radius:8px;margin-top:15px;text-align:right;direction:rtl;font-size:13.5px;color:#000;line-height:1.8;'>⚠️ {DISCLAIMER_HTML}</div>", unsafe_allow_html=True)
+    ctx = get_context(user_query)
+    ans = ""
+    try:
+        prompt = "اجب فقط من هذه اللوائح. اذا غير موجود قل غير موجود.\n\n" + ctx + "\n\nالسؤال: " + user_query
+        r = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
+        ans = r.text
+    except:
+        ans = "من واقع اللوائح المرفقة:\n\n" + ctx[:1500]
+
+    if not ans:
+        ans = "عذرا، هذه المعلومة غير متوفرة في اللوائح المرفقة حاليا."
+
+    st.markdown(f"<div style='background:#FFF9E6;border-right:6px solid #C9A
