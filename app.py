@@ -48,11 +48,24 @@ if (submit_button or user_query) and user_query:
         try:
             base = "انت مساعد اكاديمي لشؤون الطلبة في كليات الرؤية. اجب بناء على النص المرفق فقط."
             full_prompt = base + "\n\nالنص:\n" + context + "\n\nسؤال الطالب:\n" + user_query
-            response = client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=full_prompt
-            )
-            st.markdown("### الاجابة من واقع اللائحة:")
-            st.write(response.text)
+            
+            # نجرب كل الموديلات المتاحة تلقائيا حتى ينجح واحد
+            candidates = ["gemini-2.5-flash", "gemini-3-flash-preview", "gemini-3.6-flash", "gemini-flash-latest", "gemini-2.0-flash"]
+            last_err = ""
+            for model_name in candidates:
+                try:
+                    response = client.models.generate_content(
+                        model=model_name,
+                        contents=full_prompt
+                    )
+                    st.markdown("### الاجابة من واقع اللائحة:")
+                    st.write(response.text)
+                    break
+                except Exception as e:
+                    last_err = str(e)
+                    continue
+            else:
+                st.error(last_err)
+                
         except Exception as e:
             st.error(str(e))
