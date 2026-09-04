@@ -5,6 +5,52 @@ from google import genai
 
 st.set_page_config(page_title="Vision Colleges", layout="centered")
 
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap');
+html, body, [data-testid="stAppViewContainer"], p, div, h1, h2, h3, input, textarea {
+    direction: rtl !important;
+    text-align: right !important;
+    font-family: 'Tajawal', sans-serif !important;
+}
+div[data-testid="stImage"] { display: flex; justify-content: center; }
+div[data-testid="stButton"] > button {
+    background-color: #c5a880 !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 12px !important;
+    padding: 12px 24px !important;
+    font-weight: 700 !important;
+    font-size: 16px !important;
+    width: 100% !important;
+}
+div[data-testid="stButton"] > button:hover { background-color: #b8976a !important; }
+.answer-box {
+    background-color: #eaf7f0;
+    padding: 20px;
+    border-radius: 12px;
+    line-height: 2.0;
+    font-size: 17px;
+    direction: rtl;
+    text-align: right;
+    border: 1px solid #c3e6cb;
+    margin-top: 15px;
+}
+.disclaimer-box {
+    background-color: #fef9e7;
+    padding: 18px;
+    border-radius: 12px;
+    border: 1px solid #f5d78e;
+    direction: rtl;
+    text-align: right;
+    line-height: 1.9;
+    font-size: 15px;
+    margin-top: 20px;
+}
+.disclaimer-box a { color: #0d47a1; font-weight: bold; word-break: break-all; }
+</style>
+""", unsafe_allow_html=True)
+
 API_KEY = st.secrets["GEMINI_API_KEY"]
 client = genai.Client(api_key=API_KEY)
 
@@ -40,31 +86,21 @@ def get_context(q):
         txt = txt + "\n" + f
     return txt[:6000]
 
-if os.path.exists("logo.png"):
-    st.image("logo.png", width=150)
-elif os.path.exists("Logo.png"):
-    st.image("Logo.png", width=150)
+col1, col2, col3 = st.columns([1, 2, 1])
+with col2:
+    if os.path.exists("logo.png"):
+        st.image("logo.png", use_container_width=True)
+    elif os.path.exists("Logo.png"):
+        st.image("Logo.png", use_container_width=True)
 
-st.title("Vision Colleges - كليات الرؤية")
-st.subheader("الاستفسار الآلي - وحدة شؤون الطلبة")
-st.write("مرحبا بكم في كلية الرؤية بالرياض، نرحب باستفساراتكم حول لوائح وانظمة الكلية، يمكنكم طرح اي سؤال وسيتم الرد عليكم مباشرة من واقع اللوائح المعتمدة.")
+st.markdown("<h1 style='text-align:center;'>Vision Colleges - كليات الرؤية</h1>", unsafe_allow_html=True)
+st.markdown("<h3 style='text-align:right;'>الاستفسار الآلي - وحدة شؤون الطلبة</h3>", unsafe_allow_html=True)
+st.write("مرحبا بكم في كلية الرؤية بالرياض، نرحب باستفساراتكم حول لوائح وأنظمة الكلية.")
 
 user_query = st.text_input(" ", placeholder="اكتب سؤالك هنا")
-btn = st.button("اضغط هنا للحصول على الاجابة")
+btn = st.button("اضغط هنا للحصول على الإجابة")
 
 LINK = "https://elearning.vision.edu.sa/course/view.php?id=188"
 
 if btn and user_query:
-    ctx = get_context(user_query)
-    ans = ""
-    try:
-        prompt = "اجب فقط من هذه اللوائح. اذا غير موجود قل غير موجود. اللوائح: " + ctx + " السؤال: " + user_query
-        r = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
-        ans = r.text
-    except:
-        ans = "من واقع اللوائح: " + ctx[:1500]
-    if not ans:
-        ans = "عذرا، هذه المعلومة غير متوفرة في اللوائح."
-    st.success(ans)
-    st.warning("تنويه: هذا برنامج رد آلي ويمكن ان تكون الاجابات في بعض الاحيان غير دقيقة، وعليه تعتبر اللوائح والانظمة الرسمية المعتمدة والمعلنة عبر الرابط التالي هي المرجع المعتمد والاخير للكلية: " + LINK)
-    st.markdown(LINK)
+    ctx =
