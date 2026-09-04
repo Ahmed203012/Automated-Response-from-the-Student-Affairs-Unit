@@ -60,7 +60,8 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-API_KEY = "AQ.Ab8RN6KzXlK-oCzASuzgsAfBGCdHDEypywVfasmG79T4vOtVCQ"
+# المفتاح الخاص بك
+API_KEY = "AQ.Ab8RN6IIn4thJ1kRjTQUkhrYrv6YRaDcplGQ3CA3bNqROmfefA"
 
 @st.cache_data
 def load_all_documents():
