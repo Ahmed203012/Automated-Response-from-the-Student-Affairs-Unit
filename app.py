@@ -5,10 +5,10 @@ from google import genai
 
 st.set_page_config(page_title="Vision Colleges", layout="centered")
 
-st.markdown("""
+css_code = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap');
-html, body, [data-testid="stAppViewContainer"], p, div, h1, h2, h3, input, textarea {
+html, body, [data-testid="stAppViewContainer"], p, div, h1, h2, h3 {
     direction: rtl !important;
     text-align: right !important;
     font-family: 'Tajawal', sans-serif !important;
@@ -17,39 +17,28 @@ div[data-testid="stImage"] { display: flex; justify-content: center; }
 div[data-testid="stButton"] > button {
     background-color: #c5a880 !important;
     color: white !important;
-    border: none !important;
     border-radius: 12px !important;
-    padding: 12px 24px !important;
-    font-weight: 700 !important;
-    font-size: 16px !important;
     width: 100% !important;
+    font-weight: bold !important;
 }
-div[data-testid="stButton"] > button:hover { background-color: #b8976a !important; }
 .answer-box {
     background-color: #eaf7f0;
     padding: 20px;
     border-radius: 12px;
-    line-height: 2.0;
-    font-size: 17px;
-    direction: rtl;
-    text-align: right;
+    line-height: 2;
     border: 1px solid #c3e6cb;
-    margin-top: 15px;
 }
 .disclaimer-box {
     background-color: #fef9e7;
     padding: 18px;
     border-radius: 12px;
     border: 1px solid #f5d78e;
-    direction: rtl;
-    text-align: right;
-    line-height: 1.9;
-    font-size: 15px;
     margin-top: 20px;
+    line-height: 1.9;
 }
-.disclaimer-box a { color: #0d47a1; font-weight: bold; word-break: break-all; }
 </style>
-""", unsafe_allow_html=True)
+"""
+st.markdown(css_code, unsafe_allow_html=True)
 
 API_KEY = st.secrets["GEMINI_API_KEY"]
 client = genai.Client(api_key=API_KEY)
@@ -61,8 +50,8 @@ def load_data():
         if fname.lower().endswith(".pdf"):
             try:
                 with pdfplumber.open(fname) as pdf:
-                    for p in pdf.pages:
-                        t = p.extract_text()
+                    for page in pdf.pages:
+                        t = page.extract_text()
                         if t and len(t.strip()) > 30:
                             chunks.append(t)
             except:
@@ -75,16 +64,19 @@ def get_context(q):
     q2 = q.replace("ة","ه")
     found = []
     for ch in ALL_CHUNKS:
-        if any(w in ch for w in q2.split() if len(w) > 2):
-            found.append(ch)
-            if len(found) >= 2:
+        words = q2.split()
+        for w in words:
+            if len(w) > 2 and w in ch:
+                found.append(ch)
                 break
+        if len(found) >= 2:
+            break
     if not found:
         found = ALL_CHUNKS[:2]
-    txt = ""
+    result = ""
     for f in found:
-        txt = txt + "\n" + f
-    return txt[:6000]
+        result = result + "\n" + f
+    return result[:6000]
 
 col1, col2, col3 = st.columns([1, 2, 1])
 with col2:
@@ -103,4 +95,16 @@ btn = st.button("اضغط هنا للحصول على الإجابة")
 LINK = "https://elearning.vision.edu.sa/course/view.php?id=188"
 
 if btn and user_query:
-    ctx =
+    context_text = get_context(user_query)
+    ans = ""
+    try:
+        prompt_text = "اجب باختصار ووضوح من اللوائح التالية فقط. اللوائح: " + context_text + " السؤال: " + user_query
+        r = client.models.generate_content(model="gemini-2.0-flash", contents=prompt_text)
+        ans = r.text
+    except:
+        ans = context_text[:2000]
+    if not ans:
+        ans = "عذرا، هذه المعلومة غير متوفرة في اللوائح."
+    st.markdown("<div class='answer-box'>" + ans + "</div>", unsafe_allow_html=True)
+    disc = "<div class='disclaimer-box'>تنويه: هذا برنامج رد آلي ويمكن ان تكون الاجابات في بعض الاحيان غير دقيقة، وعليه تعتبر اللوائح والانظمة الرسمية المعتمدة والمعلنة عبر الرابط التالي هي المرجع المعتمد والاخير للكلية:<br><a href='" + LINK + "' target='_blank'>" + LINK + "</a></div>"
+    st.markdown(disc, unsafe_allow_html=True)
