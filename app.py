@@ -59,32 +59,23 @@ LINK = "https://elearning.vision.edu.sa/course/view.php?id=188"
 
 def find_best_pdfs(query, max_files=2):
     pdfs = [f for f in os.listdir(".") if f.lower().endswith(".pdf")]
-    if not pdfs:
-        return []
-    q = query.lower()
-    scored = []
-    for pdf in pdfs:
-        score = 0
-        name = pdf.lower()
-        if "عذر" in q or "غياب" in q:
-            if "عذر" in name or "لائحة" in name or "دليل" in name:
-                score += 10
-        scored.append((score, pdf))
-    scored.sort(key=lambda x: x[0], reverse=True)
-    if scored[0][0] == 0:
-        return pdfs[:max_files]
-    return [p for s,p in scored[:max_files]]
+    return pdfs[:max_files]
 
 if btn and user_query:
     best_pdfs = find_best_pdfs(user_query)
     ans = ""
-    last_error = ""
-    models_to_try = ["gemini-1.5-flash", "gemini-2.5-flash", "gemini-2.0-flash-exp", "gemini-1.5-flash-8b"]
     try:
         from google import genai
         from google.genai import types
         API_KEY = st.secrets["GEMINI_API_KEY"]
         client = genai.Client(api_key=API_KEY)
+        try:
+            available_models = list(client.models.list())
+            flash_models = [m.name.replace("models/","") for m in available_models if "flash" in m.name.lower()]
+        except:
+            flash_models = []
+        preferred = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
+        all_to_try = flash_models + [m for m in preferred if m not in flash_models]
         parts = []
         for pdf_file in best_pdfs:
             try:
@@ -93,9 +84,9 @@ if btn and user_query:
                 parts.append(types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"))
             except:
                 pass
-        prompt = f"انت مساعد اكاديمي في كليات الرؤية بالرياض. اقرأ ملفات اللوائح المرفقة واجب على هذا السؤال بالعربية الفصحى الواضحة في نقاط مرتبة: {user_query}. اذا كان السؤال عن عذر الوفاة اذكر المدة وطريقة التقديم والاوراق المطلوبة."
+        prompt = f"انت مساعد اكاديمي في كليات الرؤية بالرياض. اقرأ ملفات اللوائح المرفقة واجب على هذا السؤال بالعربية الفصحى الواضحة في نقاط: {user_query}"
         parts.append(types.Part.from_text(text=prompt))
-        for model_name in models_to_try:
+        for model_name in all_to_try:
             try:
                 r = client.models.generate_content(
                     model=model_name,
@@ -104,14 +95,12 @@ if btn and user_query:
                 if r and r.text and len(r.text.strip()) > 10:
                     ans = r.text
                     break
-            except Exception as e:
-                last_error = str(e)
+            except:
                 continue
+        if not ans:
+            ans = "عذرا، الموديلات غير متاحة حاليا. حاول مرة اخرى."
     except Exception as e:
-        last_error = str(e)
-        ans = ""
-    if not ans:
-        ans = f"عذرا، حدث خطأ مؤقت في قراءة اللوائح. (التفاصيل: {last_error[:400]}). يرجى المحاولة مرة اخرى."
+        ans = f"خطأ في الاتصال: {str(e)[:500]}"
     st.markdown("<div class='answer-box'>" + ans + "</div>", unsafe_allow_html=True)
     disc = "<div class='disclaimer-box'>تنويه: هذا برنامج رد آلي ويمكن ان تكون الاجابات في بعض الاحيان غير دقيقة، وعليه تعتبر اللوائح والانظمة الرسمية المعتمدة والمعلنة عبر الرابط التالي هي المرجع المعتمد والاخير للكلية:<br><a href='" + LINK + "' target='_blank'>" + LINK + "</a></div>"
     st.markdown(disc, unsafe_allow_html=True)
