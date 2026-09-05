@@ -1,5 +1,4 @@
-import os, re, streamlit as st
-
+import os, streamlit as st
 st.set_page_config(page_title="كليات الرؤية", layout="centered")
 st.markdown("""
 <style>
@@ -15,7 +14,7 @@ st.markdown("<h1 style='text-align:center!important;'>كليات الرؤية - 
 st.markdown("<h3 style='text-align:center!important;'>الاستفسار الآلي - وحدة شؤون الطلبة</h3>", unsafe_allow_html=True)
 st.markdown("<p style='text-align:right!important;'>مرحبا بكم في كلية الرؤية بالرياض، نرحب باستفساراتكم حول لوائح وأنظمة الكلية.</p>", unsafe_allow_html=True)
 
-q=st.text_input(" ", placeholder="مثال: ما الفترة المسموح بها لتقديم عذر الوفاة")
+q=st.text_input(" ", placeholder="مثال: الوفاة")
 btn=st.button("اضغط هنا للحصول على الإجابة")
 
 LINK="https://elearning.vision.edu.sa/course/view.php?id=188"
@@ -27,76 +26,52 @@ def read_all_txt():
     logs=[]
     for fname in os.listdir("."):
         low=fname.lower()
-        # هذا الشرط يضمن قراءة كل ملفات .txt مهما كان اسمها
-        if low.endswith(".txt"):
-            try:
-                # جرب كل الترميزات العربية
-                for enc in ["utf-8","utf-8-sig","windows-1256","cp1256"]:
-                    try:
-                        with open(fname,"r",encoding=enc,errors="ignore") as f:
-                            t=f.read()
-                            if len(t.strip())>20:
-                                full+=t+"\n"
-                                logs.append(f"{fname} -> {len(t)} حرف")
-                                break
-                    except: pass
-            except Exception as e:
-                logs.append(f"{fname} خطأ {e}")
+        if low.endswith(".txt"):  # هذا يضمن قراءة كل ملفات text
+            for enc in ["utf-8","utf-8-sig","windows-1256","cp1256"]:
+                try:
+                    with open(fname,"r",encoding=enc,errors="ignore") as f:
+                        t=f.read()
+                        if len(t.strip())>20:
+                            full+=t+"\n"
+                            logs.append(f"{fname} -> {len(t)} حرف")
+                            break
+                except: pass
     return full, logs
-
-def extract_duration(query, text):
-    # حدد نوع العذر
-    if "وفاة" in query: keys=["وفاة","الوفاة"]
-    elif "ولادة" in query or "وضع" in query: keys=["ولادة","الولادة","الوضع"]
-    elif "زواج" in query: keys=["زواج","الزواج"]
-    else: keys=[]
-
-    for k in keys:
-        # ابحث عن الكلمة وخذ 800 حرف بعدها
-        for m in re.finditer(k, text):
-            idx=m.start()
-            snippet=text[idx:idx+800]
-            # نظف
-            snippet_clean=snippet.replace("\r"," ").replace("\n"," ")
-            # ابحث عن رقم + يوم داخل الفقرة
-            dur=re.search(r"(\d+\s*(?:يوم|أيام|ساعة|ساعات)|ثلاثة أيام|ثلاثة|يومين|ثلاثة أيام عمل|خلال\s+\d+\s+أيام)", snippet_clean)
-            if dur:
-                # ارجع الفقرة كاملة حتى المدة
-                return snippet[:snippet.find(dur.group(0))+len(dur.group(0))+100].strip()[:500]
-            # لو ما وجد رقم، ارجع الفقرة نفسها
-            if len(snippet.strip())>20:
-                return snippet[:400].strip()
-    return ""
 
 if btn and q:
     full_text, logs = read_all_txt()
     
-    # للتصحيح - يظهر في الشريط الجانبي
+    # اعرض ما قرأه للتأكد
     st.sidebar.write("الملفات المقروءة:")
     for l in logs: st.sidebar.write(l)
-    st.sidebar.write(f"إجمالي النص: {len(full_text)} حرف")
     
-    ans=extract_duration(q, full_text)
+    ql=q.strip()
+    ans=OUT
     
-    if not ans:
-        # بحث احتياطي سطر بسطر
-        for line in full_text.splitlines():
-            if "وفاة" in q and "وفاة" in line and len(line.strip())>10:
-                ans=line.strip()
-                # أضف السطر التالي لأنه فيه المدة
-                idx=full_text.splitlines().index(line)
-                if idx+1 < len(full_text.splitlines()):
-                    ans+=" "+full_text.splitlines()[idx+1].strip()
-                break
-            if "ولادة" in q and "ولادة" in line and len(line.strip())>10:
-                ans=line.strip()
-                idx=full_text.splitlines().index(line)
-                if idx+1 < len(full_text.splitlines()):
-                    ans+=" "+full_text.splitlines()[idx+1].strip()
-                break
-
-    if not ans or len(ans)<5:
-        ans=OUT
+    # ابحث عن كلمة الوفاة أو الولادة بأي شكل
+    search_key=""
+    if "وفاة" in ql or "وفاه" in ql or "الوفاة" in ql:
+        search_key="وفا"  # يمسك وفاة و وفاه و الوفاة
+    elif "ولادة" in ql or "ولاده" in ql:
+        search_key="ولاد"
+    elif "زواج" in ql:
+        search_key="زواج"
+    
+    if search_key and search_key in full_text:
+        idx=full_text.find(search_key)
+        # خذ 700 حرف حول الكلمة حتى لو لم يجد كلمة يوم
+        start=max(0, idx-150)
+        end=min(len(full_text), idx+600)
+        snippet=full_text[start:end].strip()
+        # نظف
+        snippet=snippet.replace("\n\n","\n").strip()
+        if len(snippet)>15:
+            ans=snippet[:600]
+            st.sidebar.write("وجدت الفقرة:")
+            st.sidebar.write(snippet[:500])
+    else:
+        st.sidebar.error(f"لم أجد كلمة {search_key} في النص")
+        st.sidebar.write(full_text[:2000])
 
     st.markdown(f"<div class='answer-box' dir='rtl'>{ans}</div>", unsafe_allow_html=True)
     st.markdown(f"<div class='disclaimer-box' dir='rtl'>{TANWIH}</div>", unsafe_allow_html=True)
