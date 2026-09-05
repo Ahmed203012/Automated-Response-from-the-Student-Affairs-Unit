@@ -1,82 +1,92 @@
-import streamlit as st
-import fitz # PyMuPDF
-from groq import Groq
-import os
+import os, streamlit as st
 
-st.set_page_config(page_title="Vision Colleges", layout="wide", page_icon="🎓")
-
-# --- التصميم الكامل ---
+st.set_page_config(page_title="كليات الرؤية", layout="centered")
 st.markdown("""
 <style>
-h1 {text-align: center; font-weight: bold;}
-h3 {text-align: center;}
-div[data-testid="stTextInput"] {direction: rtl; text-align: right;}
+@import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap');
+html, body, [data-testid="stAppViewContainer"] { direction: rtl!important; text-align: right!important; }
+* { font-family: 'Tajawal', sans-serif!important; direction: rtl!important; text-align: right!important; }
+div[data-testid="stImage"] { display:flex!important; justify-content:center!important; }
+div[data-testid="stButton"] > button { background:#c5a880!important; color:white!important; border-radius:14px!important; width:100%!important; font-weight:bold!important; font-size:17px!important; padding:12px!important; }
+.answer-box { background:#eaf7f0; padding:22px; border-radius:12px; border:1px solid #c3e6cb; font-size:18px; line-height:2; }
+.disclaimer-box { background:#fef9e7; padding:16px; border-radius:12px; border:1px solid #f5d78e; margin-top:18px; font-size:14px; }
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("<h1>Vision Colleges - كليات الرؤية</h1>", unsafe_allow_html=True)
-st.markdown("<h3>الاستفسار الآلي - وحدة شؤون الطلبة</h3>", unsafe_allow_html=True)
-st.markdown("<p style='text-align:center'>مرحباً بكم في كلية الرؤية بالرياض، نرحب باستفساركم حول لوائح وأنظمة الكلية</p>", unsafe_allow_html=True)
+c1,c2,c3=st.columns([1,1.2,1])
+with c2:
+    if os.path.exists("logo.png"): st.image("logo.png", use_container_width=True)
+    elif os.path.exists("Logo.png"): st.image("Logo.png", use_container_width=True)
 
-# --- المفتاح ---
-try:
-    GROQ_KEY = st.secrets["GROQ_API_KEY"]
-except:
-    st.error("لم يتم العثور على GROQ_API_KEY في Secrets")
-    st.stop()
+st.markdown("<h1 style='text-align:center!important; font-size:32px!important;'>كليات الرؤية - Vision Colleges</h1>", unsafe_allow_html=True)
+st.markdown("<h2 style='text-align:center!important; font-size:26px!important;'>الاستفسار الآلي - وحدة شؤون الطلبة</h2>", unsafe_allow_html=True)
+st.markdown("<p style='text-align:center!important; font-size:18px!important;'>مرحبا بكم في كلية الرؤية بالرياض، نرحب باستفساركم حول لوائح وأنظمة الكلية.</p>", unsafe_allow_html=True)
 
-client = Groq(api_key=GROQ_KEY)
+q=st.text_input(" ", placeholder="اكتب سؤالك هنا...")
+btn=st.button("اضغط هنا للحصول على الإجابة")
 
-# --- الموديل الوحيد الشغال حالياً في Groq - هذا يصلح خطأ 404 في صورك ---
-MODEL_ID = "llama3-8b-8192"
+LINK="https://elearning.vision.edu.sa/course/view.php?id=188"
+OUT="هذه المعلومة غير متوفرة حاليا في اللوائح المعتمدة لدينا يرجى مراجعة وحدة شؤون الطلبة."
+TANWIH=f"تنويه: هذا برنامج رد آلي ويمكن ان تكون الاجابات في بعض الاحيان غير دقيقة، وعليه تعتبر اللوائح والانظمة الرسمية المعتمدة والمعلنة عبر الرابط التالي هي المرجع المعتمد والاخير للكلية:<br><a href='{LINK}' target='_blank' style='direction:ltr; display:inline-block;'>{LINK}</a>"
 
-# --- قراءة كل ملفات PDF ---
-@st.cache_data
-def load_pdfs():
-    context = ""
-    for root, dirs, files in os.walk("."):
-        for file in files:
-            if file.endswith(".pdf"):
+def read_all():
+    full=""
+    for f in os.listdir("."):
+        low=f.lower()
+        if low.endswith(".txt"):
+            for enc in ["utf-8","utf-8-sig","windows-1256"]:
                 try:
-                    doc = fitz.open(os.path.join(root, file))
-                    for page in doc:
-                        context += page.get_text() + "\n"
-                except:
-                    pass
-    return context
+                    with open(f,"r",encoding=enc,errors="ignore") as file:
+                        t=file.read()
+                        if len(t.strip())>20:
+                            full+=t+"\n"
+                            break
+                except: pass
+        elif low.endswith(".pdf"):
+            try:
+                import fitz
+                full+="\n".join([p.get_text() for p in fitz.open(f)])+"\n"
+            except: pass
+        elif low.endswith((".xlsx",".xls",".csv")):
+            try:
+                import pandas as pd
+                df=pd.read_excel(f, dtype=str).fillna("") if not low.endswith(".csv") else pd.read_csv(f, dtype=str).fillna("")
+                for _, row in df.iterrows():
+                    line=" | ".join([str(v).strip() for v in row.values if str(v).strip()!=""])
+                    if len(line)>5:
+                        full+=line+"\n"
+            except: pass
+    return full
 
-with st.spinner("جاري تحميل لوائح الكلية..."):
-    pdf_context = load_pdfs()
-    if len(pdf_context) < 100:
-        # نص احتياطي اذا لم يجد الملفات
-        pdf_context = """
-        عميد كلية الرؤية هو أ.د. عبد الله بن محمد الدهيش.
-        المدة المسموح بها لتقديم عذر حالة الوفاة هي 5 أيام ويجب تقديمه خلال أسبوع من تاريخ الوفاة.
-        جميع اللوائح الأكاديمية وشؤون الطلبة موجودة في ملفات الكلية.
-        """
+if btn and q:
+    corpus=read_all()
+    ans=""
+    try:
+        from groq import Groq
+        client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+        prompt = f"""أنت مساعد شؤون الطلبة في كليات الرؤية بالرياض.
+أجب باختصار شديد سطر أو سطرين فقط ومن النص المرجعي فقط.
+- لا تخلط: عذر الوفاة = 5 أيام + تقديم خلال أسبوع، عذر الولادة = أسبوع واحد + تقديم خلال 10 أيام، العذر الطبي/الحوادث = 3 أيام عمل.
+- إذا سُئلت عن عميد أو وكيل أو ايميل ابحث عن الاسم بالضبط.
+- إذا لم تجد قل: {OUT}
 
-# --- صندوق السؤال بنفس تصميمك ---
-question = st.text_input("اكتب سؤالك", placeholder="مثال: ما المدة المسموح بها لتقديم عذر حالة الوفاة")
+النص المرجعي:
+{corpus[:15000]}
 
-if st.button("اضغط هنا للحصول على الإجابة"):
-    if not question.strip():
-        st.warning("الرجاء كتابة السؤال")
-    else:
-        try:
-            completion = client.chat.completions.create(
-                model=MODEL_ID, # <--- هذا السطر هو اللي كان عامل خطأ model_not_found في صورك
-                messages=[
-                    {"role": "system", "content": f"أنت مساعد ذكي لوحدة شؤون الطلبة في كليات الرؤية. أجب باللغة العربية فقط من خلال النص التالي. إذا لم تجد الإجابة قل لا توجد معلومة. النص: {pdf_context[:15000]}"},
-                    {"role": "user", "content": question}
-                ],
-                temperature=0.1,
-                max_tokens=1000
-            )
-            answer = completion.choices[0].message.content
-            st.success(answer)
+السؤال: {q}
+الإجابة المختصرة:"""
 
-            st.markdown("---")
-            st.caption("تنويه: هذا برنامج آلي قد يحتوي على أخطاء، في حال عدم وضوح الإجابة يرجى مراجعة وحدة شؤون الطلبة أو التواصل عبر الرابط التالي للرد المخصص والمتابعة عبر البريد الإلكتروني المخصص والخطة الدراسية.")
+        completion = client.chat.completions.create(
+            model="openai/gpt-oss-20b",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.1
+        )
+        ans = completion.choices[0].message.content.strip()
+    except Exception as e:
+        ans = f"خطأ في الاتصال بـ Groq: {e}"
 
-        except Exception as e:
-            st.error(f"Groq Error: {e}")
+    if not ans:
+        ans=OUT
+
+    st.markdown(f"<div class='answer-box' dir='rtl'>{ans}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='disclaimer-box' dir='rtl'>{TANWIH}</div>", unsafe_allow_html=True)
