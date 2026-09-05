@@ -1,4 +1,4 @@
-import os, re, streamlit as st
+import os, streamlit as st
 
 st.set_page_config(page_title="كليات الرؤية", layout="centered")
 st.markdown("""
@@ -39,7 +39,7 @@ def read_all():
                     with open(f,"r",encoding=enc,errors="ignore") as file:
                         t=file.read()
                         if len(t.strip())>20:
-                            full+=f"\n---{f}---\n"+t+"\n"
+                            full+=t+"\n"
                             break
                 except: pass
         elif low.endswith(".pdf"):
@@ -61,36 +61,29 @@ def read_all():
 if btn and q:
     corpus=read_all()
     ans=""
-
     try:
-        from google import genai
-        client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
-
-        # جرب الموديلات الجديدة بالترتيب
-        models_to_try = ["gemini-2.5-flash", "gemini-2.0-flash-001", "gemini-1.5-flash", "gemini-1.5-flash-001"]
-
+        from groq import Groq
+        client = Groq(api_key=st.secrets["GROQ_API_KEY"])
         prompt = f"""أنت مساعد شؤون الطلبة في كليات الرؤية بالرياض.
-أجب من النص المرجعي فقط وباختصار شديد سطر أو سطرين.
-- لا تخلط: الوفاة = 5 أيام + تقديم خلال أسبوع، الولادة = أسبوع واحد + تقديم خلال 10 أيام، الطبي/الحوادث = 3 أيام عمل.
-- إذا سُئل عن اسم أو ايميل ابحث عن الاسم بالضبط.
+أجب باختصار شديد سطر أو سطرين فقط ومن النص المرجعي فقط.
+- لا تخلط: عذر الوفاة = 5 أيام + تقديم خلال أسبوع، عذر الولادة = أسبوع واحد + تقديم خلال 10 أيام، العذر الطبي/الحوادث = 3 أيام عمل.
+- إذا سُئلت عن عميد أو وكيل أو ايميل ابحث عن الاسم بالضبط.
 - إذا لم تجد قل: {OUT}
 
-النص:
-{corpus[:20000]}
+النص المرجعي:
+{corpus[:15000]}
 
-السؤال: {q}"""
+السؤال: {q}
+الإجابة المختصرة:"""
 
-        for m in models_to_try:
-            try:
-                response = client.models.generate_content(model=m, contents=prompt)
-                if response.text:
-                    ans = response.text.strip()
-                    break
-            except:
-                continue
-
+        completion = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.1
+        )
+        ans = completion.choices[0].message.content.strip()
     except Exception as e:
-        ans = f"خطأ: {e} - تأكد من GEMINI_API_KEY في Secrets"
+        ans = f"خطأ في الاتصال بـ Groq: {e}"
 
     if not ans:
         ans=OUT
