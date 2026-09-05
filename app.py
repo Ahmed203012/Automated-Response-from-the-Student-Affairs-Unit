@@ -45,8 +45,7 @@ def read_all():
         elif low.endswith(".pdf"):
             try:
                 import fitz
-                t="\n".join([p.get_text() for p in fitz.open(f)])
-                full+=f"\n---{f}---\n"+t+"\n"
+                full+="\n".join([p.get_text() for p in fitz.open(f)])+"\n"
             except: pass
         elif low.endswith((".xlsx",".xls",".csv")):
             try:
@@ -61,34 +60,37 @@ def read_all():
 
 if btn and q:
     corpus=read_all()
-
     ans=""
+
     try:
-        # الطريقة الجديدة الصحيحة للاتصال بـ Gemini
         from google import genai
         client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
-        prompt = f"""أنت مساعد ذكي لوحدة شؤون الطلبة في كليات الرؤية.
-أجب من النص المرجعي فقط وباختصار شديد (سطر أو سطرين).
-- لا تخلط بين الأعذار: عذر الوفاة يختلف عن عذر الولادة يختلف عن العذر الطبي.
-- إذا السؤال عن الوفاة اذكر مدة الوفاة فقط (5 أيام + تقديم خلال أسبوع).
-- إذا السؤال عن الولادة اذكر الولادة فقط (أسبوع واحد + تقديم خلال 10 أيام).
-- إذا السؤال عن عذر طبي اذكر 3 أيام عمل.
-- إذا السؤال عن اسم أو ايميل ابحث عن الاسم بالضبط.
-- إذا لم تجد الإجابة قل: {OUT}
 
-النص المرجعي:
+        # جرب الموديلات الجديدة بالترتيب
+        models_to_try = ["gemini-2.5-flash", "gemini-2.0-flash-001", "gemini-1.5-flash", "gemini-1.5-flash-001"]
+
+        prompt = f"""أنت مساعد شؤون الطلبة في كليات الرؤية بالرياض.
+أجب من النص المرجعي فقط وباختصار شديد سطر أو سطرين.
+- لا تخلط: الوفاة = 5 أيام + تقديم خلال أسبوع، الولادة = أسبوع واحد + تقديم خلال 10 أيام، الطبي/الحوادث = 3 أيام عمل.
+- إذا سُئل عن اسم أو ايميل ابحث عن الاسم بالضبط.
+- إذا لم تجد قل: {OUT}
+
+النص:
 {corpus[:20000]}
 
-السؤال: {q}
-الإجابة المختصرة:"""
+السؤال: {q}"""
 
-        response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=prompt
-        )
-        ans = response.text.strip()
+        for m in models_to_try:
+            try:
+                response = client.models.generate_content(model=m, contents=prompt)
+                if response.text:
+                    ans = response.text.strip()
+                    break
+            except:
+                continue
+
     except Exception as e:
-        ans = f"خطأ في الاتصال بـ Gemini: {e} - تأكد من وضع GEMINI_API_KEY في Secrets"
+        ans = f"خطأ: {e} - تأكد من GEMINI_API_KEY في Secrets"
 
     if not ans:
         ans=OUT
