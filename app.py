@@ -3,91 +3,113 @@ from google import genai
 from google.genai import types
 from pypdf import PdfReader
 
-# --- 1- تصحيح التنسيق والتباعد الكبير ---
-st.set_page_config(page_title="مساعد شؤون الطلبة", layout="centered", page_title_="مساعد شؤون الطلبة")
+# --- إعداد الصفحة وتصحيح التباعد ---
+st.set_page_config(page_title="مساعد شؤون الطلبة", layout="centered")
 
 st.markdown("""
 <style>
     .stApp { direction: rtl; text-align: right; }
-    p, li, div { line-height: 1.7 !important; margin-bottom: 6px !important; }
-    h1, h2, h3 { margin-top: 15px !important; margin-bottom: 10px !important; }
-    .answer-box { background-color: #f0f7f4; padding: 20px; border-radius: 10px; border-right: 5px solid #2e7d5b; }
+    html, body, p, li, div { line-height: 1.6 !important; }
+    p { margin-bottom: 5px !important; }
+    .answer-box { 
+        background-color: #f6f9f7; 
+        padding: 20px; 
+        border-radius: 12px; 
+        border-right: 6px solid #2e7d5b;
+        white-space: pre-line;
+    }
+    .footer-note {
+        margin-top: 20px; 
+        background-color: #fdf8e8; 
+        padding: 12px; 
+        border-radius: 8px; 
+        font-size: 13px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
 st.title("مساعد شؤون الطلبة")
-st.caption("مرحبا بكم في كلية الرؤية بالرياض، نرحب باستفساراتكم حول لوائح وأنظمة الكلية.")
+st.write("مرحبا بكم في كليات الرؤية - مساعد الرد الآلي للوائح الأعذار")
 
-API_KEY = "AIzaضع_مفتاحك_هنا"
+# المفتاح - يفضل وضعه في Secrets في Streamlit Cloud
+try:
+    API_KEY = st.secrets["GEMINI_API_KEY"]
+except:
+    API_KEY = "AIzaضع_مفتاحك_هنا"
+
 client = genai.Client(api_key=API_KEY)
 
-# --- 2- قراءة اللوائح ---
 def read_pdf(file):
     text = ""
     reader = PdfReader(file)
     for page in reader.pages:
-        t = page.extract_text()
-        if t:
-            text += t + "\n"
+        extracted = page.extract_text()
+        if extracted:
+            text += extracted + "\n"
     return text
 
 with st.sidebar:
-    st.header("رفع اللوائح")
-    f1 = st.file_uploader("ملف الأعذار الطلابية", type="pdf")
-    if f1:
-        st.session_state["laws"] = read_pdf(f1)
-        st.success("تم تحميل اللائحة")
+    st.header("1- رفع اللائحة")
+    uploaded_file = st.file_uploader("ارفع ملف لائحة الأعذار PDF", type="pdf")
+    if uploaded_file:
+        st.session_state["laws_text"] = read_pdf(uploaded_file)
+        st.success("تم تحميل اللائحة بنجاح")
 
-if "laws" not in st.session_state:
-    st.info("يرجى رفع لائحة الأعذار من الشريط الجانبي أولاً")
+if "laws_text" not in st.session_state:
+    st.info("يرجى رفع ملف اللائحة أولا من القائمة الجانبية")
     st.stop()
 
-# --- 3- السؤال ---
-query = st.text_input("مثال: ما المدة المسموح بها لتقديم عذر طبي عن المحاضرات؟")
+# --- السؤال ---
+st.subheader("2- اسأل سؤالك")
+user_query = st.text_input("مثال: ما المدة المسموح بها لتقديم عذر طبي؟")
 
-if st.button("اضغط هنا للحصول على الإجابة") and query:
+if st.button("اضغط هنا للحصول على الإجابة"):
+    if not user_query:
+        st.warning("اكتب سؤالك أولا")
+    else:
+        # --- Prompt مانع للتأليف 100% ---
+        prompt = f"""
+أنت آلة استخراج نصوص فقط. ممنوع التأليف.
 
-    # --- 4- Prompt مانع التأليف 100% ---
-    system_prompt = f"""
-أنت نظام استخراج معلومات حرفي. ممنوع منعاً باتاً التأليف أو التلخيص أو إضافة كلمات من عندك.
-
-المصدر الوحيد هو هذا النص:
+النص المصدر الوحيد هو:
 ---
-{st.session_state["laws"][:18000]}
+{st.session_state["laws_text"][:20000]}
 ---
 
-قواعد إجبارية:
-1.  إذا سُئلت عن مدة تقديم العذر عن محاضرة: الجواب هو حرفياً من النص: "خلال ثلاثة أيام عمل من تاريخ التغيب عن الفعالية الأكاديمية" - لا تقل أسبوع.
-2.  إذا سُئلت عن نسبة الحرمان: الجواب هو "75%" و "50%" فقط كما في النص.
-3.  لا تجب بأكثر من المطلوب. إذا طُلب رقم، أجب برقم فقط.
-4.  حافظ على نفس ترقيم وتنسيق اللائحة الأصلية: 1. المدة المسموح بها... 2. ضوابط قبول العذر... 3. تنبيه في حال كان الغياب عن اختبار.
-5.  اذكر الفقرة الأصلية نسخ لصق. لا تغير كلمة واحدة.
-6.  إذا لم تجد المعلومة، قل: لا يوجد نص صريح في اللائحة المرفوعة.
+السؤال: {user_query}
 
-المطلوب الآن: أجب عن هذا السؤال: {query}
-بالتنسيق المحدد وبدون تباعد كبير وبدون إضافة مقدمات.
+تعليمات صارمة جداً:
+1. انسخ الإجابة حرفياً من النص المصدر. لا تغير أي رقم.
+2. إذا السؤال عن مدة تقديم العذر عن محاضرة فالجواب هو "خلال ثلاثة أيام عمل من تاريخ التغيب" وليس أسبوع.
+3. إذا السؤال عن نسبة الحرمان فالجواب "75%" وإذا عن رفع الحرمان فـ "50%".
+4. إذا طُلب رقم فقط، أجب برقم فقط بدون شرح.
+5. احتفظ بنفس التنسيق الأصلي:
+   1. المدة المسموح بها لتقديم العذر الطبي
+   2. ضوابط قبول العذر ورفع الحرمان من المقرر (المادتان 14 و 15)
+   3. تنبيه في حال كان الغياب الطبي عن "اختبار"
+6. لا تضف أي معلومة من خارج النص.
+7. إذا لم تجد الجواب قل: لا يوجد نص صريح في اللائحة المرفوعة.
 """
 
-    try:
-        response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=system_prompt,
-            config=types.GenerateContentConfig(
-                temperature=0.0,  # هذا يمنعه يألف
-                top_p=0.1,
-                max_output_tokens=800
-            )
-        )
-        
-        # --- 5- عرض بنفس التنسيق اللي في صورك ---
-        st.markdown(f'<div class="answer-box">{response.text}</div>', unsafe_allow_html=True)
-        
-        st.markdown("""
-        <div style='margin-top:20px; background-color:#fdf8e8; padding:15px; border-radius:8px; font-size:13px;'>
-        تنويه: هذا برنامج رد آلي ويمكن ان تكون الاجابات في بعض الاحيان غير دقيقة، وعليه تعتبر اللوائح والانظمة الرسمية المعتمدة والمعلنة عبر الرابط التالي هي المرجع المعتمد والاخير للكلية:<br>
-        <a href='https://elearning.vision.edu.sa/course/view.php?id=188' target='_blank'>https://elearning.vision.edu.sa/course/view.php?id=188</a>
-        </div>
-        """, unsafe_allow_html=True)
+        with st.spinner("جاري البحث في اللائحة..."):
+            try:
+                response = client.models.generate_content(
+                    model="gemini-2.0-flash",
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        temperature=0.0,
+                        top_p=0.1,
+                        max_output_tokens=1000
+                    )
+                )
+                st.markdown(f'<div class="answer-box">{response.text}</div>', unsafe_allow_html=True)
 
-    except Exception as e:
-        st.error(f"خطأ: {e}")
+                st.markdown(f"""
+                <div class="footer-note">
+                تنويه: هذا برنامج رد آلي ويمكن أن تكون الإجابات في بعض الأحيان غير دقيقة، وعليه تعتبر اللوائح والأنظمة الرسمية المعتمدة والمعلنة عبر الرابط التالي هي المرجع المعتمد والأخير للكلية:<br>
+                <a href="https://elearning.vision.edu.sa/course/view.php?id=188" target="_blank">https://elearning.vision.edu.sa/course/view.php?id=188</a>
+                </div>
+                """, unsafe_allow_html=True)
+
+            except Exception as e:
+                st.error(f"حدث خطأ: {e}")
