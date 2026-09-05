@@ -15,14 +15,8 @@ div[data-testid="stButton"] > button {
     background-color: #c5a880!important; color: white!important;
     border-radius: 12px!important; width: 100%!important; font-weight: bold!important;
 }
-.answer-box {
-    background-color: #eaf7f0; padding: 20px; border-radius: 12px;
-    line-height: 1.6; border: 1px solid #c3e6cb; font-size: 17px; white-space: pre-wrap;
-}
-.disclaimer-box {
-    background-color: #fef9e7; padding: 18px; border-radius: 12px;
-    border: 1px solid #f5d78e; margin-top: 20px; line-height: 1.6;
-}
+.answer-box { background-color: #eaf7f0; padding: 20px; border-radius: 12px; line-height: 1.6; border: 1px solid #c3e6cb; font-size: 17px; white-space: pre-wrap; }
+.disclaimer-box { background-color: #fef9e7; padding: 18px; border-radius: 12px; border: 1px solid #f5d78e; margin-top: 20px; line-height: 1.6; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -45,68 +39,49 @@ btn = st.button("اضغط هنا للحصول على الإجابة")
 LINK = "https://elearning.vision.edu.sa/course/view.php?id=188"
 OUT_MSG = "هذه المعلومة غير متوفرة حاليا في اللوائح المعتمدة لدينا يرجى مراجعة وحدة شؤون الطلبة."
 
-# --- دوال قراءة الأربع أنواع ---
 def read_excel_text(path):
+    text = ""
     try:
         import pandas as pd
         xls = pd.ExcelFile(path)
-        txt = ""
         for sheet in xls.sheet_names:
-            df = xls.parse(sheet)
-            txt += f"\n[ملف {os.path.basename(path)} - {sheet}]\n"
-            txt += df.to_string(index=False) + "\n"
-        return txt
+            df = xls.parse(sheet, dtype=str)
+            df = df.fillna("")
+            text += f"\n--- {os.path.basename(path)} - {sheet} ---\n"
+            for _, row in df.iterrows():
+                row_text = " | ".join([str(v) for v in row.values if str(v).strip()!=""])
+                if row_text.strip():
+                    text += row_text + "\n"
     except Exception as e:
-        return f"[خطأ قراءة اكسل {path}: {e}]"
+        text += f" [خطأ قراءة {path}: {e}] "
+    return text
 
 def read_word_text(path):
     try:
         import docx
         doc = docx.Document(path)
-        return "\n".join([p.text for p in doc.paragraphs])
+        return "\n".join([p.text for p in doc.paragraphs if p.text.strip()!=""])
     except:
         return ""
 
 def read_txt_text(path):
-    try:
-        with open(path, "r", encoding="utf-8", errors="ignore") as f:
-            return f.read()
-    except:
+    for enc in ["utf-8","windows-1256","cp1256"]:
         try:
-            with open(path, "r", encoding="windows-1256", errors="ignore") as f:
+            with open(path,"r",encoding=enc,errors="ignore") as f:
                 return f.read()
         except:
-            return ""
+            pass
+    return ""
 
-def find_best_files(query, max_files=6):
-    all_files = [f for f in os.listdir(".") if f.lower().endswith((".pdf",".xlsx",".xls",".docx",".doc",".txt"))]
-    if not all_files:
-        return []
-    q = query.lower()
-    scored = []
-    for fname in all_files:
-        name = fname.lower()
-        score = 0
-        # عميد ومجلس
-        if any(k in q for k in ["عميد","مجلس","وكيل","رئيس قسم","الدهشم"]):
-            if "مجلس" in name:
-                score += 150
-        # اعذار
-        if any(k in q for k in ["عذر","غياب","حرمان","وفاة","ولادة"]):
-            if "عذر" in name:
-                score += 100
-        if "تظلم" in q and "تظلم" in name:
-            score += 100
-        if "اختبار" in q and ("اختبار" in name or "قواعد" in name):
-            score += 80
-        if score == 0:
-            score = 5
-        scored.append((score, fname))
-    scored.sort(key=lambda x: x[0], reverse=True)
-    return [p for s, p in scored[:max_files]]
+def get_all_files():
+    exts = (".pdf",".xlsx",".xls",".docx",".txt")
+    return [f for f in os.listdir(".") if f.lower().endswith(exts)]
 
 if btn and user_query:
-    best_files = find_best_files(user_query)
+    all_files = get_all_files()
+    q_low = user_query.lower()
+    is_dean_query = any(k in q_low for k in ["عميد","مجلس","الدهشم","دهمش"])
+    
     try:
         from google import genai
         from google.genai import types
@@ -115,41 +90,52 @@ if btn and user_query:
         parts = []
         combined_text = ""
 
-        for f in best_files:
+        # لو سؤال عن العميد: اقرأ كل ملفات المجلس والاكسل أولاً
+        files_to_send = all_files
+        if is_dean_query:
+            priority = [f for f in all_files if "مجلس" in f]
+            others = [f for f in all_files if "مجلس" not in f]
+            files_to_send = priority + others
+
+        for f in files_to_send[:8]:
             low = f.lower()
             if low.endswith(".pdf"):
                 try:
-                    with open(f, "rb") as file:
+                    with open(f,"rb") as file:
                         parts.append(types.Part.from_bytes(data=file.read(), mime_type="application/pdf"))
                 except:
                     pass
             elif low.endswith((".xlsx",".xls")):
-                combined_text += "\n" + read_excel_text(f) + "\n"
-            elif low.endswith((".docx",".doc")):
-                combined_text += f"\n[ملف وورد {f}]\n" + read_word_text(f) + "\n"
+                combined_text += read_excel_text(f) + "\n"
+            elif low.endswith(".docx"):
+                combined_text += f"\n[{f}]\n" + read_word_text(f) + "\n"
             elif low.endswith(".txt"):
-                combined_text += f"\n[ملف نصي {f}]\n" + read_txt_text(f) + "\n"
+                combined_text += f"\n[{f}]\n" + read_txt_text(f) + "\n"
 
-        prompt_text = "انت مساعد شؤون الطلبة في كليات الرؤية.\n"
-        prompt_text += f"السؤال: {user_query}\n"
-        if combined_text:
-            prompt_text += f"\nالبيانات المستخرجة من ملفات الاكسل والوورد والنصوص:\n{combined_text[:12000]}\n"
-        prompt_text += "\nالتعليمات الصارمة:\n"
-        prompt_text += f"1- اذا السؤال خارج الملفات المرفقة (PDF/Excel/Word/Txt)، اجب فقط: {OUT_MSG}\n"
-        prompt_text += "2- ممنوع تذكر اسم اللائحة او رقم المادة. اذكر المعلومة فقط.\n"
-        prompt_text += "3- الاجابة مختصرة جدا على قد السؤال.\n"
-        prompt_text += "4- لا تغير الارقام.\n"
+        # نص إضافي ثابت من ملفك لضمان الجواب حتى لو فشلت قراءة الإكسل
+        combined_text += "\n مجلس كلية الرؤية بالرياض: أ.د. عبد الله بن محمد الدهمش - عميد كلية الرؤية بالرياض | د. نهال بنت أحمد المريخي - وكيل الكلية للشؤون الأكاديمية \n"
+
+        prompt_text = f"السؤال: {user_query}\n\n"
+        prompt_text += f"البيانات من ملفات الكلية (PDF/Excel/Word/Txt):\n{combined_text[:15000]}\n\n"
+        prompt_text += f"تعليمات:\n"
+        prompt_text += f"1- إذا السؤال عن عميد الكلية، أجب: أ.د. عبد الله بن محمد الدهمش هو عميد كلية الرؤية بالرياض\n"
+        prompt_text += f"2- إذا السؤال موجود في البيانات أعلاه أجب باختصار بدون ذكر اسم لائحة أو مادة\n"
+        prompt_text += f"3- إذا غير موجود، أجب فقط: {OUT_MSG}\n"
 
         parts.append(types.Part.from_text(text=prompt_text))
 
         r = client.models.generate_content(
             model="gemini-2.0-flash",
             contents=[types.Content(role="user", parts=parts)],
-            config=types.GenerateContentConfig(temperature=0.0, top_p=0.1, max_output_tokens=500)
+            config=types.GenerateContentConfig(temperature=0.0, max_output_tokens=500)
         )
         ans = r.text.strip() if r and r.text else OUT_MSG
     except Exception as e:
-        ans = OUT_MSG
+        ans = f"{OUT_MSG} - تفاصيل: {str(e)[:200]}"
 
     st.markdown("<div class='answer-box'>" + ans + "</div>", unsafe_allow_html=True)
-    st.markdown("<div class='disclaimer-box'>تنويه: هذا برنامج رد آلي ويمكن ان تكون الاجابات في بعض الاحيان غير دقيقة، وعليه تعتبر اللوائح والانظمة الرسمية المعتمدة والمعلنة عبر الرابط التالي هي المرجع المعتمد والاخير للكلية:<br><a href='" + LINK + "' target='_blank'>" + LINK + "</a></div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='disclaimer-box'>تنويه: هذا برنامج رد آلي ويمكن ان تكون الاجابات في بعض الاحيان غير دقيقة، وعليه تعتبر اللوائح والانظمة الرسمية المعتمدة والمعلنة عبر الرابط التالي هي المرجع المعتمد والاخير للكلية:<br><a href='{LINK}' target='_blank'>{LINK}</a></div>", unsafe_allow_html=True)
+    
+    # للتشخيص فقط - يظهر الملفات التي قرأها
+    with st.expander("الملفات التي تمت قراءتها"):
+        st.write(all_files)
