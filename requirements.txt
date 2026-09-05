@@ -1,7 +1,4 @@
 streamlit
-google-genai
-pandas
-openpyxl
 python-docx
 PyMuPDF
 PyPDF2
