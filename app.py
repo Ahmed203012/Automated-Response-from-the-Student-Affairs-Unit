@@ -1,4 +1,5 @@
 import os
+import re
 import streamlit as st
 
 st.set_page_config(page_title="Vision Colleges", layout="centered")
@@ -15,19 +16,16 @@ div[data-testid="stButton"] > button {
     background-color: #c5a880!important; color: white!important;
     border-radius: 12px!important; width: 100%!important; font-weight: bold!important;
 }
-.answer-box { background-color: #eaf7f0; padding: 20px; border-radius: 12px; line-height: 1.6; border: 1px solid #c3e6cb; font-size: 17px; white-space: pre-wrap; }
-.disclaimer-box { background-color: #fef9e7; padding: 18px; border-radius: 12px; border: 1px solid #f5d78e; margin-top: 20px; line-height: 1.6; }
+.answer-box { background-color: #eaf7f0; padding: 20px; border-radius: 12px; line-height: 1.7; border: 1px solid #c3e6cb; font-size: 17px; white-space: pre-wrap; }
+.disclaimer-box { background-color: #fef9e7; padding: 18px; border-radius: 12px; border: 1px solid #f5d78e; margin-top: 20px; line-height: 1.7; }
 </style>
 """, unsafe_allow_html=True)
 
 c1, c2, c3 = st.columns([2,1,2])
 with c2:
-    if os.path.exists("logo.png"):
-        st.image("logo.png", width=120)
-    elif os.path.exists("Logo.png"):
-        st.image("Logo.png", width=120)
-    else:
-        st.write("")
+    if os.path.exists("logo.png"): st.image("logo.png", width=120)
+    elif os.path.exists("Logo.png"): st.image("Logo.png", width=120)
+    else: st.write("")
 
 st.markdown("<h1 style='text-align:center;'>كليات الرؤية - Vision Colleges</h1>", unsafe_allow_html=True)
 st.markdown("<h3 style='text-align:right;'>الاستفسار الآلي - وحدة شؤون الطلبة</h3>", unsafe_allow_html=True)
@@ -39,6 +37,25 @@ btn = st.button("اضغط هنا للحصول على الإجابة")
 LINK = "https://elearning.vision.edu.sa/course/view.php?id=188"
 OUT_MSG = "هذه المعلومة غير متوفرة حاليا في اللوائح المعتمدة لدينا يرجى مراجعة وحدة شؤون الطلبة."
 
+def read_pdf_text(path):
+    txt = ""
+    try:
+        import fitz
+        doc = fitz.open(path)
+        for page in doc:
+            txt += page.get_text() + "\n"
+        return txt
+    except:
+        pass
+    try:
+        import PyPDF2
+        reader = PyPDF2.PdfReader(path)
+        for p in reader.pages:
+            txt += (p.extract_text() or "") + "\n"
+        return txt
+    except:
+        return ""
+
 def read_excel_text(path):
     try:
         import pandas as pd
@@ -46,11 +63,9 @@ def read_excel_text(path):
         txt = ""
         for sheet in xls.sheet_names:
             df = xls.parse(sheet, dtype=str).fillna("")
-            txt += f"\n[{os.path.basename(path)}]\n"
             for _, row in df.iterrows():
                 line = " | ".join([str(v).strip() for v in row.values if str(v).strip()!=""])
-                if line:
-                    txt += line + "\n"
+                if line: txt += line + "\n"
         return txt
     except:
         return ""
@@ -72,64 +87,74 @@ def read_txt_text(path):
             pass
     return ""
 
+def local_search_answer(query, full_text):
+    # يبحث محلياً بدون Gemini - لأي منصب
+    q = query.lower()
+    keywords = re.findall(r'[\w\u0600-\u06FF]+', q)
+    lines = [l.strip() for l in full_text.splitlines() if l.strip()!="" and len(l.strip())>3]
+    hits = []
+    for line in lines:
+        ll = line.lower()
+        # لو السطر فيه كلمة من السؤال (وكيل، جودة، عميد...)
+        if any(k in ll for k in keywords if len(k)>2):
+            hits.append(line)
+    if hits:
+        # رجع أول 5 أسطر مطابقة فقط - مختصرة
+        return "\n".join(hits[:5])
+    return ""
+
 if btn and user_query:
+    all_files = [f for f in os.listdir(".") if f.lower().endswith((".pdf",".xlsx",".xls",".docx",".txt"))]
+    full_corpus = ""
+    pdf_parts = []
     try:
-        from google import genai
         from google.genai import types
-        API_KEY = st.secrets["GEMINI_API_KEY"]
-        client = genai.Client(api_key=API_KEY)
-
-        all_files = [f for f in os.listdir(".") if f.lower().endswith((".pdf",".xlsx",".xls",".docx",".txt"))]
-        q_low = user_query.lower()
-        is_dean = any(k in q_low for k in ["عميد","مجلس","الدهشم"])
-
-        # ترتيب الملفات: مجلس الكلية أولاً إذا السؤال عن العميد
-        if is_dean:
-            pri = [f for f in all_files if "مجلس" in f]
-            rest = [f for f in all_files if "مجلس" not in f]
-            all_files = pri + rest
-
-        parts = []
-        combined = ""
-        for f in all_files[:8]:
+        for f in all_files:
             low = f.lower()
             if low.endswith(".pdf"):
+                full_corpus += "\n" + read_pdf_text(f) + "\n"
                 try:
                     with open(f,"rb") as file:
-                        parts.append(types.Part.from_bytes(data=file.read(), mime_type="application/pdf"))
+                        pdf_parts.append(types.Part.from_bytes(data=file.read(), mime_type="application/pdf"))
                 except:
                     pass
             elif low.endswith((".xlsx",".xls")):
-                combined += read_excel_text(f)
+                full_corpus += "\n" + read_excel_text(f) + "\n"
             elif low.endswith(".docx"):
-                combined += read_word_text(f)
+                full_corpus += "\n" + read_word_text(f) + "\n"
             elif low.endswith(".txt"):
-                combined += read_txt_text(f)
+                full_corpus += "\n" + read_txt_text(f) + "\n"
+    except:
+        pass
 
-        combined += "\nبيانات مؤكدة: عميد كلية الرؤية بالرياض هو أ.د. عبد الله بن محمد الدهمش\n"
+    # 1- محاولة ذكية محلية أولاً (تشتغل حتى بدون انترنت)
+    local_ans = local_search_answer(user_query, full_corpus)
 
-        prompt = f"السؤال: {user_query}\n\n"
-        prompt += f"البيانات من الملفات:\n{combined[:15000]}\n\n"
-        prompt += f"تعليمات: 1- اذا السؤال عن العميد اجب: أ.د. عبد الله بن محمد الدهمش - عميد كلية الرؤية بالرياض\n"
-        prompt += f"2- اذا موجود في الملفات اجب باختصار بدون ذكر اسم لائحة او مادة\n"
-        prompt += f"3- اذا غير موجود اجب فقط: {OUT_MSG}\n"
-
-        parts.append(types.Part.from_text(text=prompt))
-
-        # تم تغيير الموديل من 2.0 الى 1.5-flash لأنه 2.0 توقف
-        r = client.models.generate_content(
-            model="gemini-1.5-flash",
-            contents=[types.Content(role="user", parts=parts)],
-            config=types.GenerateContentConfig(temperature=0.0, max_output_tokens=400)
-        )
-        ans = r.text.strip() if r and r.text else OUT_MSG
-
-    except Exception as e:
-        # لو حصل خطأ لا تظهر تفاصيل الـ error للطالب
-        if "404" in str(e) or "not found" in str(e).lower():
-            ans = OUT_MSG
-        else:
-            ans = OUT_MSG
+    if local_ans and any(k in user_query.lower() for k in ["عميد","وكيل","رئيس","جودة","مجلس","مسؤول","مدير"]):
+        ans = local_ans
+    else:
+        # 2- لو ما لقينا محلياً، نسأل Gemini بالنص المستخرج
+        try:
+            from google import genai
+            from google.genai import types
+            API_KEY = st.secrets["GEMINI_API_KEY"]
+            client = genai.Client(api_key=API_KEY)
+            parts = pdf_parts[:6]
+            prompt = f"السؤال: {user_query}\n\n"
+            prompt += f"نصوص الكلية المستخرجة من كل الملفات PDF/Excel/Word/Txt:\n{full_corpus[:15000]}\n\n"
+            prompt += "التعليمات: اجب باختصار شديد من النصوص فقط بدون ذكر اسم لائحة او مادة. اذا غير موجود اجب بالجملة المحددة.\n"
+            prompt += f"اذا غير موجود: {OUT_MSG}"
+            parts.append(types.Part.from_text(text=prompt))
+            r = client.models.generate_content(
+                model="gemini-1.5-flash",
+                contents=[types.Content(role="user", parts=parts)],
+                config=types.GenerateContentConfig(temperature=0.0, max_output_tokens=500)
+            )
+            ans = r.text.strip() if r and r.text else OUT_MSG
+            if not ans or len(ans)<3:
+                ans = local_ans if local_ans else OUT_MSG
+        except:
+            ans = local_ans if local_ans else OUT_MSG
 
     st.markdown("<div class='answer-box'>" + ans + "</div>", unsafe_allow_html=True)
     st.markdown(f"<div class='disclaimer-box'>تنويه: هذا برنامج رد آلي ويمكن ان تكون الاجابات في بعض الاحيان غير دقيقة، وعليه تعتبر اللوائح والانظمة الرسمية المعتمدة والمعلنة عبر الرابط التالي هي المرجع المعتمد والاخير للكلية:<br><a href='{LINK}' target='_blank'>{LINK}</a></div>", unsafe_allow_html=True)
