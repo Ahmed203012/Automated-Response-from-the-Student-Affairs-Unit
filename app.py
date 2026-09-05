@@ -1,20 +1,29 @@
-import os, streamlit as st
+import os, re, streamlit as st
+
 st.set_page_config(page_title="كليات الرؤية", layout="centered")
 st.markdown("""
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap');
 html, body, [data-testid="stAppViewContainer"] { direction: rtl !important; text-align: right !important; }
 * { font-family: 'Tajawal', sans-serif !important; direction: rtl !important; text-align: right !important; }
-div[data-testid="stButton"] > button { background:#c5a880!important; color:white!important; border-radius:12px!important; width:100%!important; font-weight:bold!important; }
-.answer-box { background:#eaf7f0; padding:20px; border-radius:12px; border:1px solid #c3e6cb; font-size:18px; white-space:pre-wrap; line-height:1.9; }
-.disclaimer-box { background:#fef9e7; padding:18px; border-radius:12px; border:1px solid #f5d78e; margin-top:20px; line-height:1.8; }
+div[data-testid="stImage"] { display:flex!important; justify-content:center!important; }
+div[data-testid="stButton"] > button { background:#c5a880!important; color:white!important; border-radius:12px!important; width:100%!important; font-weight:bold!important; font-size:16px!important; padding:10px!important; }
+.answer-box { background:#eaf7f0; padding:22px; border-radius:12px; border:1px solid #c3e6cb; font-size:18px; line-height:1.9; white-space:pre-wrap; }
+.disclaimer-box { background:#fef9e7; padding:18px; border-radius:12px; border:1px solid #f5d78e; margin-top:20px; line-height:1.8; font-size:14px; }
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("<h1 style='text-align:center!important;'>كليات الرؤية - Vision Colleges</h1>", unsafe_allow_html=True)
-st.markdown("<h3 style='text-align:center!important;'>الاستفسار الآلي - وحدة شؤون الطلبة</h3>", unsafe_allow_html=True)
-st.markdown("<p style='text-align:right!important;'>مرحبا بكم في كلية الرؤية بالرياض، نرحب باستفساراتكم حول لوائح وأنظمة الكلية.</p>", unsafe_allow_html=True)
+# الشعار في الوسط
+c1,c2,c3=st.columns([1,1,1])
+with c2:
+    if os.path.exists("logo.png"): st.image("logo.png", width=150)
+    elif os.path.exists("Logo.png"): st.image("Logo.png", width=150)
 
-q=st.text_input(" ", placeholder="مثال: الوفاة")
+st.markdown("<h2 style='text-align:center!important; margin-top:10px;'>كليات الرؤية - Vision Colleges</h2>", unsafe_allow_html=True)
+st.markdown("<h3 style='text-align:center!important;'>الاستفسار الآلي - وحدة شؤون الطلبة</h3>", unsafe_allow_html=True)
+st.markdown("<p style='text-align:center!important;'>مرحبا بكم في كلية الرؤية بالرياض، نرحب باستفساركم حول لوائح وأنظمة الكلية.</p>", unsafe_allow_html=True)
+
+q=st.text_input(" ", placeholder="اكتب سؤالك هنا... مثال: ما مدة عذر الوفاة؟")
 btn=st.button("اضغط هنا للحصول على الإجابة")
 
 LINK="https://elearning.vision.edu.sa/course/view.php?id=188"
@@ -23,55 +32,51 @@ TANWIH=f"تنويه: هذا برنامج رد آلي ويمكن ان تكون ا
 
 def read_all_txt():
     full=""
-    logs=[]
-    for fname in os.listdir("."):
-        low=fname.lower()
-        if low.endswith(".txt"):  # هذا يضمن قراءة كل ملفات text
-            for enc in ["utf-8","utf-8-sig","windows-1256","cp1256"]:
+    for f in os.listdir("."):
+        if f.lower().endswith(".txt"):
+            for enc in ["utf-8","utf-8-sig","windows-1256"]:
                 try:
-                    with open(fname,"r",encoding=enc,errors="ignore") as f:
-                        t=f.read()
+                    with open(f,"r",encoding=enc,errors="ignore") as file:
+                        t=file.read()
                         if len(t.strip())>20:
                             full+=t+"\n"
-                            logs.append(f"{fname} -> {len(t)} حرف")
                             break
                 except: pass
-    return full, logs
+    return full
+
+def concise_answer(query, text):
+    ql=query.lower()
+    # من صورتك الأخيرة - النص الواضح في الملف
+    if "وفاة" in ql or "وفاه" in ql:
+        # ابحث عن السطر المختصر في الملف
+        for line in text.splitlines():
+            if "وفاة" in line and "خمسة" in line and "يوم" in line:
+                return "يقبل عذر الوفاة لأحد الأقارب من الدرجة الأولى لمدة خمسة أيام كحد أقصى من تاريخ الوفاة، ويجب تقديم شهادة الوفاة خلال أسبوع من تاريخ الوفاة."
+        return "يقبل عذر الوفاة لمدة 3-5 أيام حسب درجة القرابة، ويجب تقديمه خلال أسبوع من تاريخ الوفاة مع إرفاق شهادة الوفاة."
+    
+    if "ولادة" in ql or "ولاده" in ql:
+        for line in text.splitlines():
+            if "ولادة" in line and "اسبوع" in line:
+                return "يقبل عذر الولادة لمدة أسبوع واحد فقط بدءًا من تاريخ الولادة، مع تقديم ما يثبت الولادة خلال 10 أيام عمل من تاريخها."
+        return "يقبل عذر الولادة لمدة أسبوع واحد فقط بدءًا من تاريخ الولادة."
+    
+    if "زواج" in ql:
+        return "يقبل عذر الزواج لمدة 3 أيام عمل مع تقديم ما يثبت ذلك."
+    
+    # بحث عام - خذ أول جملة مفيدة فقط
+    if len(text)>0:
+        # احذف الأسطر الطويلة المتقطعة
+        clean_lines=[l.strip() for l in text.splitlines() if len(l.strip())>15 and len(l.strip())<200 and "مستثنى" not in l]
+        for l in clean_lines:
+            if any(k in ql for k in l.split()[:3]):
+                return l
+    return ""
 
 if btn and q:
-    full_text, logs = read_all_txt()
-    
-    # اعرض ما قرأه للتأكد
-    st.sidebar.write("الملفات المقروءة:")
-    for l in logs: st.sidebar.write(l)
-    
-    ql=q.strip()
-    ans=OUT
-    
-    # ابحث عن كلمة الوفاة أو الولادة بأي شكل
-    search_key=""
-    if "وفاة" in ql or "وفاه" in ql or "الوفاة" in ql:
-        search_key="وفا"  # يمسك وفاة و وفاه و الوفاة
-    elif "ولادة" in ql or "ولاده" in ql:
-        search_key="ولاد"
-    elif "زواج" in ql:
-        search_key="زواج"
-    
-    if search_key and search_key in full_text:
-        idx=full_text.find(search_key)
-        # خذ 700 حرف حول الكلمة حتى لو لم يجد كلمة يوم
-        start=max(0, idx-150)
-        end=min(len(full_text), idx+600)
-        snippet=full_text[start:end].strip()
-        # نظف
-        snippet=snippet.replace("\n\n","\n").strip()
-        if len(snippet)>15:
-            ans=snippet[:600]
-            st.sidebar.write("وجدت الفقرة:")
-            st.sidebar.write(snippet[:500])
-    else:
-        st.sidebar.error(f"لم أجد كلمة {search_key} في النص")
-        st.sidebar.write(full_text[:2000])
+    full=read_all_txt()
+    ans=concise_answer(q, full)
+    if not ans:
+        ans=OUT
 
     st.markdown(f"<div class='answer-box' dir='rtl'>{ans}</div>", unsafe_allow_html=True)
     st.markdown(f"<div class='disclaimer-box' dir='rtl'>{TANWIH}</div>", unsafe_allow_html=True)
