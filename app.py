@@ -1,60 +1,92 @@
-import streamlit as st, os, re, fitz
-from groq import Groq
+import os, streamlit as st
 
-st.set_page_config(page_title="Vision Colleges", layout="wide")
-st.markdown("<h1 style='text-align:center'>Vision Colleges - كليات الرؤية</h1>", unsafe_allow_html=True)
-st.markdown("<h2 style='text-align:center'>الاستفسار الآلي - وحدة شؤون الطلبة</h2>", unsafe_allow_html=True)
+st.set_page_config(page_title="كليات الرؤية", layout="centered")
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap');
+html, body, [data-testid="stAppViewContainer"] { direction: rtl!important; text-align: right!important; }
+* { font-family: 'Tajawal', sans-serif!important; direction: rtl!important; text-align: right!important; }
+div[data-testid="stImage"] { display:flex!important; justify-content:center!important; }
+div[data-testid="stButton"] > button { background:#c5a880!important; color:white!important; border-radius:14px!important; width:100%!important; font-weight:bold!important; font-size:17px!important; padding:12px!important; }
+.answer-box { background:#eaf7f0; padding:22px; border-radius:12px; border:1px solid #c3e6cb; font-size:18px; line-height:2; }
+.disclaimer-box { background:#fef9e7; padding:16px; border-radius:12px; border:1px solid #f5d78e; margin-top:18px; font-size:14px; }
+</style>
+""", unsafe_allow_html=True)
 
-GROQ_KEY = st.secrets["GROQ_API_KEY"]
-client = Groq(api_key=GROQ_KEY)
-MODEL_ID = "openai/gpt-oss-20b"
+c1,c2,c3=st.columns([1,1.2,1])
+with c2:
+    if os.path.exists("logo.png"): st.image("logo.png", use_container_width=True)
+    elif os.path.exists("Logo.png"): st.image("Logo.png", use_container_width=True)
 
-# كلمات عامة يجب تجاهلها في البحث
-STOP_WORDS = {"ما","من","هو","هي","هل","في","عن","على","الى","إلى","كيف","لماذا","متى","أين","بها","لها","هذا","هذه","الذي","التي"}
+st.markdown("<h1 style='text-align:center!important; font-size:32px!important;'>كليات الرؤية - Vision Colleges</h1>", unsafe_allow_html=True)
+st.markdown("<h2 style='text-align:center!important; font-size:26px!important;'>الاستفسار الآلي - وحدة شؤون الطلبة</h2>", unsafe_allow_html=True)
+st.markdown("<p style='text-align:center!important; font-size:18px!important;'>مرحبا بكم في كلية الرؤية بالرياض، نرحب باستفساركم حول لوائح وأنظمة الكلية.</p>", unsafe_allow_html=True)
 
-def load_chunks():
-    full = ""
-    for r,_,fs in os.walk("."):
-        for f in fs:
-            if f.lower().endswith(".pdf"):
+q=st.text_input(" ", placeholder="اكتب سؤالك هنا...")
+btn=st.button("اضغط هنا للحصول على الإجابة")
+
+LINK="https://elearning.vision.edu.sa/course/view.php?id=188"
+OUT="هذه المعلومة غير متوفرة حاليا في اللوائح المعتمدة لدينا يرجى مراجعة وحدة شؤون الطلبة."
+TANWIH=f"تنويه: هذا برنامج رد آلي ويمكن ان تكون الاجابات في بعض الاحيان غير دقيقة، وعليه تعتبر اللوائح والانظمة الرسمية المعتمدة والمعلنة عبر الرابط التالي هي المرجع المعتمد والاخير للكلية:<br><a href='{LINK}' target='_blank' style='direction:ltr; display:inline-block;'>{LINK}</a>"
+
+def read_all():
+    full=""
+    for f in os.listdir("."):
+        low=f.lower()
+        if low.endswith(".txt"):
+            for enc in ["utf-8","utf-8-sig","windows-1256"]:
                 try:
-                    doc = fitz.open(os.path.join(r,f))
-                    for p in doc: full += p.get_text() + "\n"
+                    with open(f,"r",encoding=enc,errors="ignore") as file:
+                        t=file.read()
+                        if len(t.strip())>20:
+                            full+=t+"\n"
+                            break
                 except: pass
-    # تقسيم ذكي كل 500 حرف
-    chunks = [full[i:i+500] for i in range(0,len(full),400)]
-    return full, chunks
+        elif low.endswith(".pdf"):
+            try:
+                import fitz
+                full+="\n".join([p.get_text() for p in fitz.open(f)])+"\n"
+            except: pass
+        elif low.endswith((".xlsx",".xls",".csv")):
+            try:
+                import pandas as pd
+                df=pd.read_excel(f, dtype=str).fillna("") if not low.endswith(".csv") else pd.read_csv(f, dtype=str).fillna("")
+                for _, row in df.iterrows():
+                    line=" | ".join([str(v).strip() for v in row.values if str(v).strip()!=""])
+                    if len(line)>5:
+                        full+=line+"\n"
+            except: pass
+    return full
 
-corpus, chunks = load_chunks()
-
-def get_context(question):
-    # تنظيف السؤال من الكلمات العامة
-    q_words = [w for w in re.findall(r'\w+', question) if w not in STOP_WORDS and len(w)>2]
-    if not q_words: q_words = re.findall(r'\w+', question)
-
-    scored = []
-    for ch in chunks:
-        score = sum(1 for w in q_words if w in ch)
-        if score>0: scored.append((score,ch))
-
-    scored.sort(key=lambda x:x[0], reverse=True)
-    if not scored:
-        # إذا لم يجد، ارجع 3500 حرف من المنتصف حيث اسم العميد والوكيل
-        mid = len(corpus)//2
-        return corpus[mid:mid+3500]
-
-    top = "\n---\n".join([c for s,c in scored[:5]])
-    return top[:4000]
-
-q = st.text_input("اكتب سؤالك")
-if st.button("اضغط هنا للحصول على الإجابة"):
-    ctx = get_context(q)
-    prompt = f"أجب من النص المرجعي فقط. إذا غير موجود قل: المعلومة غير متوفرة في اللوائح. النص: {ctx}\nالسؤال: {q}\nالإجابة المختصرة:"
+if btn and q:
+    corpus=read_all()
+    ans=""
     try:
-        r = client.chat.completions.create(model=MODEL_ID, messages=[{"role":"user","content":prompt}], temperature=0.0, max_tokens=500)
-        st.success(r.choices[0].message.content)
-        # للتشخيص - احذفه بعد ما تتأكد
-        with st.expander("النص المرجعي المستخدم (للتأكد)"):
-            st.text(ctx[:2000])
+        from groq import Groq
+        client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+        prompt = f"""أنت مساعد شؤون الطلبة في كليات الرؤية بالرياض.
+أجب باختصار شديد سطر أو سطرين فقط ومن النص المرجعي فقط.
+- لا تخلط: عذر الوفاة = 5 أيام + تقديم خلال أسبوع، عذر الولادة = أسبوع واحد + تقديم خلال 10 أيام، العذر الطبي/الحوادث = 3 أيام عمل.
+- إذا سُئلت عن عميد أو وكيل أو ايميل ابحث عن الاسم بالضبط.
+- إذا لم تجد قل: {OUT}
+
+النص المرجعي:
+{corpus[:7000]}
+
+السؤال: {q}
+الإجابة المختصرة:"""
+
+        completion = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.1
+        )
+        ans = completion.choices[0].message.content.strip()
     except Exception as e:
-        st.error(e)
+        ans = f"خطأ في الاتصال بـ Groq: {e}"
+
+    if not ans:
+        ans=OUT
+
+    st.markdown(f"<div class='answer-box' dir='rtl'>{ans}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='disclaimer-box' dir='rtl'>{TANWIH}</div>", unsafe_allow_html=True)
