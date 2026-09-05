@@ -39,13 +39,14 @@ def read_all():
                     with open(f,"r",encoding=enc,errors="ignore") as file:
                         t=file.read()
                         if len(t.strip())>20:
-                            full+=t+"\n"
+                            full+=f"\n---{f}---\n"+t+"\n"
                             break
                 except: pass
         elif low.endswith(".pdf"):
             try:
                 import fitz
-                full+="\n".join([p.get_text() for p in fitz.open(f)])+"\n"
+                t="\n".join([p.get_text() for p in fitz.open(f)])
+                full+=f"\n---{f}---\n"+t+"\n"
             except: pass
         elif low.endswith((".xlsx",".xls",".csv")):
             try:
@@ -58,81 +59,36 @@ def read_all():
             except: pass
     return full
 
-def get_answer(query, corpus):
-    ql=query.lower()
-    is_email = "ايميل" in ql or "@" in ql or "email" in ql
-    is_name = any(x in ql for x in ["من هو","من هي","من عميد","عميد الكلية","وكيل"])
-    is_duration = "مدة" in ql or "كم" in ql or "خلال" in ql
-
-    lines=list(set([l.strip() for l in corpus.splitlines() if 15 < len(l.strip()) < 300]))
-
-    # مرادفات
-    if "طبي" in ql: ql+=" مرضية صحية تقرير طبي"
-    if "حادث" in ql or "حوادث" in ql: ql+=" حادث مروري اصابة تقرير"
-    if "ولادة" in ql: ql+=" ولادة وضع مولود"
-
-    q_words=[w for w in ql.split() if len(w)>2]
-
-    scored=[]
-    for l in lines:
-        score=sum(1 for w in q_words if w in l)
-        # إذا سؤال عن مدة، أعط نقاط إضافية للسطر اللي فيه رقم ويوم/أسبوع
-        if is_duration and re.search(r'\d+|خمسة|ثلاثة|ثلاث|اسبوع|أسبوع|يوم|أيام', l):
-            if re.search(r'(يوم|أيام|اسبوع|أسبوع)', l):
-                score+=3
-        if score>0:
-            scored.append((score,l))
-    scored.sort(key=lambda x: x[0], reverse=True)
-
-    if not scored:
-        return ""
-
-    if is_email:
-        for _,l in scored:
-            if "@" in l:
-                return l[:300]
-        return ""
-
-    if is_name:
-        for _,l in scored:
-            if ("الدكتور" in l or "د." in l or "أ.د" in l) and "يجوز" not in l:
-                return l[:300]
-        # إذا اسم العميد موجود في ملف واحد بصيغة محددة
-        for _,l in scored:
-            if "عميد" in l and len(l)<150 and "يجوز" not in l:
-                return l[:300]
-        return ""
-
-    # للمدة: خذ أول سطرين فيهما مدة مختلفة
-    if is_duration:
-        res=[]
-        for _,l in scored:
-            if re.search(r'(يوم|أيام|اسبوع|أسبوع)', l):
-                if l not in res:
-                    res.append(l)
-            if len(res)>=2:
-                break
-        if res:
-            return " - ".join(res)[:500]
-
-    return scored[0][1][:400]
-
 if btn and q:
     corpus=read_all()
-    ans=get_answer(q, corpus)
 
-    if not ans:
-        try:
-            import google.generativeai as genai
-            genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-            model=genai.GenerativeModel("gemini-1.5-flash")
-            # أرسل فقط السطور التي لها علاقة
-            rel="\n".join([l for l in corpus.splitlines() if any(w in l for w in q.split() if len(w)>2)][:20])
-            prompt=f"أجب باختصار من النص فقط. إذا سؤال عن مدة اذكر الرقم واليوم. النص:{rel[:10000]}\nالسؤال:{q}\nالإجابة:"
-            r=model.generate_content(prompt)
-            if r.text and "يجوز تحويل" not in r.text:
-                ans=r.text.strip()[:500]
-        except: pass
+    ans=""
+    try:
+        # الطريقة الجديدة الصحيحة للاتصال بـ Gemini
+        from google import genai
+        client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+        prompt = f"""أنت مساعد ذكي لوحدة شؤون الطلبة في كليات الرؤية.
+أجب من النص المرجعي فقط وباختصار شديد (سطر أو سطرين).
+- لا تخلط بين الأعذار: عذر الوفاة يختلف عن عذر الولادة يختلف عن العذر الطبي.
+- إذا السؤال عن الوفاة اذكر مدة الوفاة فقط (5 أيام + تقديم خلال أسبوع).
+- إذا السؤال عن الولادة اذكر الولادة فقط (أسبوع واحد + تقديم خلال 10 أيام).
+- إذا السؤال عن عذر طبي اذكر 3 أيام عمل.
+- إذا السؤال عن اسم أو ايميل ابحث عن الاسم بالضبط.
+- إذا لم تجد الإجابة قل: {OUT}
+
+النص المرجعي:
+{corpus[:20000]}
+
+السؤال: {q}
+الإجابة المختصرة:"""
+
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt
+        )
+        ans = response.text.strip()
+    except Exception as e:
+        ans = f"خطأ في الاتصال بـ Gemini: {e} - تأكد من وضع GEMINI_API_KEY في Secrets"
 
     if not ans:
         ans=OUT
