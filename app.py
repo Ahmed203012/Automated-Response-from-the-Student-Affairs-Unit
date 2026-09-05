@@ -45,45 +45,41 @@ def read_all():
         elif low.endswith(".pdf"):
             try:
                 import fitz
-                t="\n".join([p.get_text() for p in fitz.open(f)])
-                full+=t+"\n"
+                full+="\n".join([p.get_text() for p in fitz.open(f)])+"\n"
             except: pass
         elif low.endswith((".xlsx",".xls",".csv")):
             try:
                 import pandas as pd
-                if low.endswith(".csv"):
-                    df=pd.read_csv(f, dtype=str).fillna("")
-                else:
-                    df=pd.read_excel(f, dtype=str).fillna("")
-                # حول كل صف لصيغة قابلة للبحث
+                df=pd.read_excel(f, dtype=str).fillna("") if not low.endswith(".csv") else pd.read_csv(f, dtype=str).fillna("")
                 for _, row in df.iterrows():
                     line=" | ".join([str(v).strip() for v in row.values if str(v).strip()!=""])
-                    if "@" in line or len(line)>10:
+                    if len(line)>5:
                         full+=line+"\n"
             except: pass
     return full
 
 def get_answer(query, corpus):
-    # إذا السؤال عن اسم شخص (من هو عميد / من هو وكيل / اسم دكتور)
-    is_name_query = any(x in query for x in ["من هو","من هي","من عميد","من وكيل","اسم"])
-    is_email_query = "ايميل" in query or "إيميل" in query or "email" in query.lower() or "@" in query
+    ql=query.lower()
+    is_email = "ايميل" in ql or "@" in ql or "email" in ql
+    is_name = any(x in ql for x in ["من هو","من هي","من عميد","عميد الكلية","وكيل"])
+    is_duration = "مدة" in ql or "كم" in ql or "خلال" in ql
 
-    # قسم لجمل
-    lines=[l.strip() for l in corpus.splitlines() if 10 < len(l.strip()) < 250]
-    # احذف التكرار (هذا اللي كان يسبب تكرار جملة يجوز تحويل الطالب 4 مرات)
-    uniq=[]
-    seen=set()
-    for l in lines:
-        if l not in seen:
-            uniq.append(l)
-            seen.add(l)
-    lines=uniq
+    lines=list(set([l.strip() for l in corpus.splitlines() if 15 < len(l.strip()) < 300]))
 
-    q_words=[w for w in query.split() if len(w)>2 and w not in ["من","هو","هي","ما","كم","ما هو"]]
+    # مرادفات
+    if "طبي" in ql: ql+=" مرضية صحية تقرير طبي"
+    if "حادث" in ql or "حوادث" in ql: ql+=" حادث مروري اصابة تقرير"
+    if "ولادة" in ql: ql+=" ولادة وضع مولود"
+
+    q_words=[w for w in ql.split() if len(w)>2]
 
     scored=[]
     for l in lines:
         score=sum(1 for w in q_words if w in l)
+        # إذا سؤال عن مدة، أعط نقاط إضافية للسطر اللي فيه رقم ويوم/أسبوع
+        if is_duration and re.search(r'\d+|خمسة|ثلاثة|ثلاث|اسبوع|أسبوع|يوم|أيام', l):
+            if re.search(r'(يوم|أيام|اسبوع|أسبوع)', l):
+                score+=3
         if score>0:
             scored.append((score,l))
     scored.sort(key=lambda x: x[0], reverse=True)
@@ -91,47 +87,51 @@ def get_answer(query, corpus):
     if not scored:
         return ""
 
-    # للايميل: لازم الجواب يحتوي @
-    if is_email_query:
+    if is_email:
         for _,l in scored:
             if "@" in l:
                 return l[:300]
-        return "" # لا يوجد ايميل -> غير متوفرة
-
-    # لاسم العميد: لازم الجواب يحتوي "الدكتور" أو "د." أو اسم صريح وليس "يجوز تحويل"
-    if is_name_query:
-        for _,l in scored:
-            if ("الدكتور" in l or "د." in l or "أ." in l) and "يجوز" not in l and "تحويل" not in l:
-                return l[:300]
-        # إذا لم نجد اسم، لا نرجع جملة تحويل، نرجع فارغ -> غير متوفرة
         return ""
 
-    # سؤال عن مدة: ارجع جملتين مختلفتين فقط (المدة + التقديم)
-    result=[]
-    for _,l in scored[:6]:
-        if l not in result:
-            result.append(l)
-        if len(result)>=2:
-            break
-    return " - ".join(result)[:500]
+    if is_name:
+        for _,l in scored:
+            if ("الدكتور" in l or "د." in l or "أ.د" in l) and "يجوز" not in l:
+                return l[:300]
+        # إذا اسم العميد موجود في ملف واحد بصيغة محددة
+        for _,l in scored:
+            if "عميد" in l and len(l)<150 and "يجوز" not in l:
+                return l[:300]
+        return ""
+
+    # للمدة: خذ أول سطرين فيهما مدة مختلفة
+    if is_duration:
+        res=[]
+        for _,l in scored:
+            if re.search(r'(يوم|أيام|اسبوع|أسبوع)', l):
+                if l not in res:
+                    res.append(l)
+            if len(res)>=2:
+                break
+        if res:
+            return " - ".join(res)[:500]
+
+    return scored[0][1][:400]
 
 if btn and q:
     corpus=read_all()
     ans=get_answer(q, corpus)
 
-    # إذا لم يجد بالبحث المحلي، جرب Gemini لكن مع منع التكرار
     if not ans:
         try:
             import google.generativeai as genai
             genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
             model=genai.GenerativeModel("gemini-1.5-flash")
-            # أرسل فقط الفقرات التي تحتوي كلمة من السؤال
-            relevant="\n".join([l for l in corpus.splitlines() if any(w in l for w in q.split() if len(w)>2)][:15])
-            if relevant:
-                prompt=f"أجب في جملة واحدة فقط من النص. إذا كان السؤال عن اسم ولم تجد اسم شخص في النص قل: {OUT}\nالنص:{relevant[:8000]}\nالسؤال:{q}"
-                r=model.generate_content(prompt)
-                if r.text and "يجوز تحويل" not in r.text: # امنع تكرار جملة التحويل
-                    ans=r.text.strip()[:400]
+            # أرسل فقط السطور التي لها علاقة
+            rel="\n".join([l for l in corpus.splitlines() if any(w in l for w in q.split() if len(w)>2)][:20])
+            prompt=f"أجب باختصار من النص فقط. إذا سؤال عن مدة اذكر الرقم واليوم. النص:{rel[:10000]}\nالسؤال:{q}\nالإجابة:"
+            r=model.generate_content(prompt)
+            if r.text and "يجوز تحويل" not in r.text:
+                ans=r.text.strip()[:500]
         except: pass
 
     if not ans:
