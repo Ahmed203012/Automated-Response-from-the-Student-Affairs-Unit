@@ -77,7 +77,7 @@ if btn and q:
 الإجابة المختصرة:"""
 
         completion = client.chat.completions.create(
-            model="openai/gpt-oss-20b"
+            model="openai/gpt-oss-20b",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.1
         )
