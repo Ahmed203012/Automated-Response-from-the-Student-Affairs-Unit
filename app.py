@@ -40,32 +40,31 @@ LINK = "https://elearning.vision.edu.sa/course/view.php?id=188"
 OUT_MSG = "هذه المعلومة غير متوفرة حاليا في اللوائح المعتمدة لدينا يرجى مراجعة وحدة شؤون الطلبة."
 
 def read_excel_text(path):
-    text = ""
     try:
         import pandas as pd
         xls = pd.ExcelFile(path)
+        txt = ""
         for sheet in xls.sheet_names:
-            df = xls.parse(sheet, dtype=str)
-            df = df.fillna("")
-            text += f"\n--- {os.path.basename(path)} - {sheet} ---\n"
+            df = xls.parse(sheet, dtype=str).fillna("")
+            txt += f"\n[{os.path.basename(path)}]\n"
             for _, row in df.iterrows():
-                row_text = " | ".join([str(v) for v in row.values if str(v).strip()!=""])
-                if row_text.strip():
-                    text += row_text + "\n"
-    except Exception as e:
-        text += f" [خطأ قراءة {path}: {e}] "
-    return text
+                line = " | ".join([str(v).strip() for v in row.values if str(v).strip()!=""])
+                if line:
+                    txt += line + "\n"
+        return txt
+    except:
+        return ""
 
 def read_word_text(path):
     try:
         import docx
         doc = docx.Document(path)
-        return "\n".join([p.text for p in doc.paragraphs if p.text.strip()!=""])
+        return "\n".join([p.text for p in doc.paragraphs])
     except:
         return ""
 
 def read_txt_text(path):
-    for enc in ["utf-8","windows-1256","cp1256"]:
+    for enc in ["utf-8","windows-1256"]:
         try:
             with open(path,"r",encoding=enc,errors="ignore") as f:
                 return f.read()
@@ -73,31 +72,26 @@ def read_txt_text(path):
             pass
     return ""
 
-def get_all_files():
-    exts = (".pdf",".xlsx",".xls",".docx",".txt")
-    return [f for f in os.listdir(".") if f.lower().endswith(exts)]
-
 if btn and user_query:
-    all_files = get_all_files()
-    q_low = user_query.lower()
-    is_dean_query = any(k in q_low for k in ["عميد","مجلس","الدهشم","دهمش"])
-    
     try:
         from google import genai
         from google.genai import types
         API_KEY = st.secrets["GEMINI_API_KEY"]
         client = genai.Client(api_key=API_KEY)
+
+        all_files = [f for f in os.listdir(".") if f.lower().endswith((".pdf",".xlsx",".xls",".docx",".txt"))]
+        q_low = user_query.lower()
+        is_dean = any(k in q_low for k in ["عميد","مجلس","الدهشم"])
+
+        # ترتيب الملفات: مجلس الكلية أولاً إذا السؤال عن العميد
+        if is_dean:
+            pri = [f for f in all_files if "مجلس" in f]
+            rest = [f for f in all_files if "مجلس" not in f]
+            all_files = pri + rest
+
         parts = []
-        combined_text = ""
-
-        # لو سؤال عن العميد: اقرأ كل ملفات المجلس والاكسل أولاً
-        files_to_send = all_files
-        if is_dean_query:
-            priority = [f for f in all_files if "مجلس" in f]
-            others = [f for f in all_files if "مجلس" not in f]
-            files_to_send = priority + others
-
-        for f in files_to_send[:8]:
+        combined = ""
+        for f in all_files[:8]:
             low = f.lower()
             if low.endswith(".pdf"):
                 try:
@@ -106,36 +100,36 @@ if btn and user_query:
                 except:
                     pass
             elif low.endswith((".xlsx",".xls")):
-                combined_text += read_excel_text(f) + "\n"
+                combined += read_excel_text(f)
             elif low.endswith(".docx"):
-                combined_text += f"\n[{f}]\n" + read_word_text(f) + "\n"
+                combined += read_word_text(f)
             elif low.endswith(".txt"):
-                combined_text += f"\n[{f}]\n" + read_txt_text(f) + "\n"
+                combined += read_txt_text(f)
 
-        # نص إضافي ثابت من ملفك لضمان الجواب حتى لو فشلت قراءة الإكسل
-        combined_text += "\n مجلس كلية الرؤية بالرياض: أ.د. عبد الله بن محمد الدهمش - عميد كلية الرؤية بالرياض | د. نهال بنت أحمد المريخي - وكيل الكلية للشؤون الأكاديمية \n"
+        combined += "\nبيانات مؤكدة: عميد كلية الرؤية بالرياض هو أ.د. عبد الله بن محمد الدهمش\n"
 
-        prompt_text = f"السؤال: {user_query}\n\n"
-        prompt_text += f"البيانات من ملفات الكلية (PDF/Excel/Word/Txt):\n{combined_text[:15000]}\n\n"
-        prompt_text += f"تعليمات:\n"
-        prompt_text += f"1- إذا السؤال عن عميد الكلية، أجب: أ.د. عبد الله بن محمد الدهمش هو عميد كلية الرؤية بالرياض\n"
-        prompt_text += f"2- إذا السؤال موجود في البيانات أعلاه أجب باختصار بدون ذكر اسم لائحة أو مادة\n"
-        prompt_text += f"3- إذا غير موجود، أجب فقط: {OUT_MSG}\n"
+        prompt = f"السؤال: {user_query}\n\n"
+        prompt += f"البيانات من الملفات:\n{combined[:15000]}\n\n"
+        prompt += f"تعليمات: 1- اذا السؤال عن العميد اجب: أ.د. عبد الله بن محمد الدهمش - عميد كلية الرؤية بالرياض\n"
+        prompt += f"2- اذا موجود في الملفات اجب باختصار بدون ذكر اسم لائحة او مادة\n"
+        prompt += f"3- اذا غير موجود اجب فقط: {OUT_MSG}\n"
 
-        parts.append(types.Part.from_text(text=prompt_text))
+        parts.append(types.Part.from_text(text=prompt))
 
+        # تم تغيير الموديل من 2.0 الى 1.5-flash لأنه 2.0 توقف
         r = client.models.generate_content(
-            model="gemini-2.0-flash",
+            model="gemini-1.5-flash",
             contents=[types.Content(role="user", parts=parts)],
-            config=types.GenerateContentConfig(temperature=0.0, max_output_tokens=500)
+            config=types.GenerateContentConfig(temperature=0.0, max_output_tokens=400)
         )
         ans = r.text.strip() if r and r.text else OUT_MSG
+
     except Exception as e:
-        ans = f"{OUT_MSG} - تفاصيل: {str(e)[:200]}"
+        # لو حصل خطأ لا تظهر تفاصيل الـ error للطالب
+        if "404" in str(e) or "not found" in str(e).lower():
+            ans = OUT_MSG
+        else:
+            ans = OUT_MSG
 
     st.markdown("<div class='answer-box'>" + ans + "</div>", unsafe_allow_html=True)
     st.markdown(f"<div class='disclaimer-box'>تنويه: هذا برنامج رد آلي ويمكن ان تكون الاجابات في بعض الاحيان غير دقيقة، وعليه تعتبر اللوائح والانظمة الرسمية المعتمدة والمعلنة عبر الرابط التالي هي المرجع المعتمد والاخير للكلية:<br><a href='{LINK}' target='_blank'>{LINK}</a></div>", unsafe_allow_html=True)
-    
-    # للتشخيص فقط - يظهر الملفات التي قرأها
-    with st.expander("الملفات التي تمت قراءتها"):
-        st.write(all_files)
