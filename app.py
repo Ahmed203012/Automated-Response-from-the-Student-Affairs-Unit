@@ -1,75 +1,60 @@
-import streamlit as st
-import os, re
-import fitz
+import streamlit as st, os, re, fitz
 from groq import Groq
 
-st.set_page_config(page_title="Vision Colleges", layout="wide", page_icon="🎓")
+st.set_page_config(page_title="Vision Colleges", layout="wide")
 st.markdown("<h1 style='text-align:center'>Vision Colleges - كليات الرؤية</h1>", unsafe_allow_html=True)
 st.markdown("<h2 style='text-align:center'>الاستفسار الآلي - وحدة شؤون الطلبة</h2>", unsafe_allow_html=True)
-st.markdown("<p style='text-align:center'>مرحبا بكم في كلية الرؤية بالرياض، نرحب باستفساركم حول لوائح وانظمة الكلية</p>", unsafe_allow_html=True)
 
-# المفتاح
 GROQ_KEY = st.secrets["GROQ_API_KEY"]
 client = Groq(api_key=GROQ_KEY)
-MODEL_ID = "openai/gpt-oss-20b" # شغال حاليا بعد إيقاف llama-3.x
+MODEL_ID = "openai/gpt-oss-20b"
 
-@st.cache_data
-def load_all_chunks():
-    full_text = ""
-    for root, _, files in os.walk("."):
-        for f in files:
+# كلمات عامة يجب تجاهلها في البحث
+STOP_WORDS = {"ما","من","هو","هي","هل","في","عن","على","الى","إلى","كيف","لماذا","متى","أين","بها","لها","هذا","هذه","الذي","التي"}
+
+def load_chunks():
+    full = ""
+    for r,_,fs in os.walk("."):
+        for f in fs:
             if f.lower().endswith(".pdf"):
                 try:
-                    doc = fitz.open(os.path.join(root, f))
-                    for p in doc:
-                        full_text += p.get_text() + "\n"
+                    doc = fitz.open(os.path.join(r,f))
+                    for p in doc: full += p.get_text() + "\n"
                 except: pass
-    # قسم النص إلى مقاطع 600 حرف
-    chunks = [full_text[i:i+600] for i in range(0, len(full_text), 500)]
-    return full_text, chunks
+    # تقسيم ذكي كل 500 حرف
+    chunks = [full[i:i+500] for i in range(0,len(full),400)]
+    return full, chunks
 
-corpus, chunks = load_all_chunks()
+corpus, chunks = load_chunks()
 
-def search_chunks(question, chunks, top_k=6):
-    q_words = set(re.findall(r'\w+', question.lower()))
+def get_context(question):
+    # تنظيف السؤال من الكلمات العامة
+    q_words = [w for w in re.findall(r'\w+', question) if w not in STOP_WORDS and len(w)>2]
+    if not q_words: q_words = re.findall(r'\w+', question)
+
     scored = []
     for ch in chunks:
-        ch_words = set(re.findall(r'\w+', ch.lower()))
-        score = len(q_words & ch_words)
-        if score > 0:
-            scored.append((score, ch))
-    scored.sort(key=lambda x: x[0], reverse=True)
-    best = [c for s,c in scored[:top_k]]
-    # إذا لم يجد شيء، خذ أول 4000 حرف كاحتياط
-    if not best:
-        return corpus[:4000]
-    return "\n---\n".join(best)[:4000]
+        score = sum(1 for w in q_words if w in ch)
+        if score>0: scored.append((score,ch))
 
-question = st.text_input("اكتب سؤالك", placeholder="ما الفترة المسموح بها لتقديم عذر...")
+    scored.sort(key=lambda x:x[0], reverse=True)
+    if not scored:
+        # إذا لم يجد، ارجع 3500 حرف من المنتصف حيث اسم العميد والوكيل
+        mid = len(corpus)//2
+        return corpus[mid:mid+3500]
 
+    top = "\n---\n".join([c for s,c in scored[:5]])
+    return top[:4000]
+
+q = st.text_input("اكتب سؤالك")
 if st.button("اضغط هنا للحصول على الإجابة"):
-    if not question.strip():
-        st.warning("اكتب سؤالك")
-    else:
-        context = search_chunks(question, chunks)
-        prompt = f"""أنت مساعد وحدة شؤون الطلبة في كليات الرؤية.
-مهمتك: أجب من النص المرجعي فقط. لا تخترع.
-إذا كانت المعلومة غير موجودة قل: هذه المعلومة غير متوفرة حاليا في اللوائح المعتمدة لدينا يرجى مراجعة وحدة شؤون الطلبة.
-
-النص المرجعي:
-{context}
-
-السؤال: {question}
-الإجابة الواضحة والمختصرة بالعربية:"""
-
-        try:
-            resp = client.chat.completions.create(
-                model=MODEL_ID,
-                messages=[{"role":"user","content":prompt}],
-                temperature=0.1,
-                max_tokens=800
-            )
-            st.success(resp.choices[0].message.content)
-            st.caption("تنويه: هذا برنامج آلي قد يحتوي على أخطاء، في حال عدم وضوح الإجابة يرجى مراجعة وحدة شؤون الطلبة")
-        except Exception as e:
-            st.error(f"Groq Error: {e}")
+    ctx = get_context(q)
+    prompt = f"أجب من النص المرجعي فقط. إذا غير موجود قل: المعلومة غير متوفرة في اللوائح. النص: {ctx}\nالسؤال: {q}\nالإجابة المختصرة:"
+    try:
+        r = client.chat.completions.create(model=MODEL_ID, messages=[{"role":"user","content":prompt}], temperature=0.0, max_tokens=500)
+        st.success(r.choices[0].message.content)
+        # للتشخيص - احذفه بعد ما تتأكد
+        with st.expander("النص المرجعي المستخدم (للتأكد)"):
+            st.text(ctx[:2000])
+    except Exception as e:
+        st.error(e)
