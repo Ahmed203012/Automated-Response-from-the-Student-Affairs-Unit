@@ -1,5 +1,7 @@
 streamlit
 PyMuPDF
+pdfplumber
 pandas
 openpyxl
 groq
+python-docx
