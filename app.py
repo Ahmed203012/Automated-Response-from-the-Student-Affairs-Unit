@@ -101,18 +101,17 @@ VERIFIED_FACTS = """
 
 HOLIDAY_WORDS = {"اجازه", "اجازات", "عطله", "عطلات", "عطل"}
 EXCUSE_WORDS = {"عذر", "اعذار", "وفاه", "ولاده", "مرضيه", "مرض", "مريض"}
+ACTIVITY_WORDS = {"نشاط", "نشاطات", "انشطه", "أنشطة", "فعاليه", "فعاليات", "خطة", "خطه", "شهر", "أكتوبر", "اكتوبر", "سبتمبر", "نوفمبر", "ديسمبر", "يناير", "فبراير", "مارس", "أبريل", "ابريل", "مايو", "أغسطس", "اغسطس"}
 EXCUSE_SOURCE_HINTS = ("excuse", "عذر")
 CALENDAR_SOURCE_HINTS = ("تقويم", "calendar")
-
+ACTIVITY_SOURCE_HINTS = ("أنشطة", "الأنشطة", "انشطة", "الأنشطه", "activity")
 
 def unscramble_reversed_arabic_line(line: str) -> str:
     rev = line[::-1]
     rev = re.sub(r"[A-Za-z0-9]+", lambda m: m.group()[::-1], rev)
     return rev
 
-
 _COMMON_ARABIC_WORDS = ("الكلية", "الطلاب", "برنامج", "الرياض", "الأنشطة")
-
 
 def pdf_text_is_reversed(sample_text: str) -> bool:
     if any(w in sample_text for w in _COMMON_ARABIC_WORDS):
@@ -120,14 +119,12 @@ def pdf_text_is_reversed(sample_text: str) -> bool:
     fixed = "\n".join(unscramble_reversed_arabic_line(l) for l in sample_text.split("\n"))
     return any(w in fixed for w in _COMMON_ARABIC_WORDS)
 
-
 def normalize_arabic(text: str) -> str:
     text = re.sub(r"[إأآا]", "ا", text)
     text = re.sub(r"ى", "ي", text)
     text = re.sub(r"ة", "ه", text)
     text = re.sub(r"[ًٌٍَُِّْ]", "", text)  # strip tashkeel
     return text
-
 
 def read_all_chunks():
     chunks = []
@@ -232,44 +229,54 @@ def read_all_chunks():
                 pass
     return chunks, warnings
 
-
-def score_chunk(question_words, question_bigrams, src, chunk_text, prefer_calendar, avoid_excuse):
+def score_chunk(question_words, question_bigrams, src, chunk_text, prefer_calendar, avoid_excuse, prefer_activity):
     norm_chunk = normalize_arabic(chunk_text)
     score = 0
     for w in question_words:
         if w in norm_chunk:
-            score += 1
+            score += 2
     for bg in question_bigrams:
         if bg in norm_chunk:
-            score += 3
+            score += 4
 
     src_low = src.lower()
     if avoid_excuse and any(h in src_low or h in src for h in EXCUSE_SOURCE_HINTS):
         score -= 5
     if prefer_calendar and any(h in src_low or h in src for h in CALENDAR_SOURCE_HINTS):
         score += 3
+    if prefer_activity and any(h in src_low or h in src for h in ACTIVITY_SOURCE_HINTS):
+        score += 8  # إعطاء أولوية مرتفعة لملف الأنشطة عند السؤال عنها
 
     return score
 
-
-def build_relevant_corpus(question, chunks, max_chars=6000, top_k=25):
+def build_relevant_corpus(question, chunks, max_chars=8000, top_k=35):
     norm_q = normalize_arabic(question)
     q_words = [w for w in re.split(r"\s+", norm_q) if w and w not in STOPWORDS and len(w) > 1]
     q_bigrams = [f"{a} {b}" for a, b in zip(q_words, q_words[1:])]
 
     asks_about_holiday = any(w in HOLIDAY_WORDS for w in q_words)
     asks_about_excuse = any(w in EXCUSE_WORDS for w in q_words)
+    asks_about_activity = any(w in ACTIVITY_WORDS for w in q_words)
+
     prefer_calendar = asks_about_holiday and not asks_about_excuse
     avoid_excuse = asks_about_holiday and not asks_about_excuse
+    prefer_activity = asks_about_activity
 
     if not q_words or not chunks:
         joined = "\n".join(c for _, c in chunks)
         return VERIFIED_FACTS + "\n" + joined[:max_chars]
 
     scored = [
-        (score_chunk(q_words, q_bigrams, src, c, prefer_calendar, avoid_excuse), src, c)
+        (score_chunk(q_words, q_bigrams, src, c, prefer_calendar, avoid_excuse, prefer_activity), src, c)
         for src, c in chunks
     ]
+    
+    # إذا كان السؤال عن الأنشطة، نلتقط أجزاء ملف الأنشطة حتى لو لم ينطبق السكور التلقائي عليها بشكل كامل
+    if prefer_activity:
+        for idx, (sc, src, c) in enumerate(scored):
+            if any(h in src for h in ACTIVITY_SOURCE_HINTS):
+                scored[idx] = (sc + 5, src, c)
+
     scored = [s for s in scored if s[0] > 0]
     scored.sort(key=lambda x: x[0], reverse=True)
 
@@ -287,23 +294,23 @@ def build_relevant_corpus(question, chunks, max_chars=6000, top_k=25):
 
     return VERIFIED_FACTS + "\n" + "\n".join(selected)
 
-
 if btn and q:
     chunks, extraction_warnings = read_all_chunks()
-    corpus = build_relevant_corpus(q, chunks, max_chars=8000, top_k=40)
+    corpus = build_relevant_corpus(q, chunks, max_chars=10000, top_k=50)
 
     ans = ""
     try:
         from groq import Groq
         client = Groq(api_key=st.secrets["GROQ_API_KEY"])
         prompt = f"""أنت مساعد شؤون الطلبة في كليات الرؤية بالرياض.
-أجب باختصار شديد سطر أو سطرين فقط ومن النص المرجعي فقط.
-- إذا سألت عن تاريخ أو موعد أكاديمي (حذف وإضافة، اختبارات، إجازة...)، استخرج اليوم والتاريخ الهجري والميلادي بدقة تامة وبشكل مباشر دون ذكر عبارات مثل "بناءً على التقويم".
-- لا تخلط: عذر الوفاة = 5 أيام + تقديم خلال أسبوع، عذر الولادة = أسبوع واحد + تقديم خلال 10 أيام، العذر الطبي/الحوادث = 3 أيام عمل.
-- إذا سُئلت عن عميد أو وكيل أو ايميل ابحث عن الاسم بالضبط.
-- لا تذكر أي مبالغ مالية أو ميزانية في إجابتك مطلقًا إلا إذا طلب السؤال ذلك صراحة بكلمة "ميزانية" أو "مبلغ" أو "تكلفة".
-- إذا كان السؤال عن قائمة أنشطة أو فعاليات شهر معين، اذكر كل نشاط مطابق لذلك الشهر تحديدًا كسطر مستقل (اسم النشاط فقط)، بدون تفاصيل الميزانية، ولا تخلطه بأنشطة شهر آخر.
-- إذا لم تجد قل: {OUT}
+مهمتك المحورية والصرامة التامة:
+1. أجب فقط وحصراً من واقع "النص المرجعي" المرفق أدناه.
+2. إذا كان السؤال عن أي موضوع خارج نطاق اللوائح والأنظمة والأكاديميات وخطة الأنشطة الخاصة بكليات الرؤية (مثل: عواصم الدول، معلومات عامة، رياضيات، أسئلة خارجية...) يجب عليك الرد فوراً بالعبارة النصية التالية فقط دون إضافة أي شيء:
+"{OUT}"
+3. أجب باختصار شديد سطر أو سطرين فقط ومن النص المرجعي فقط.
+4. إذا سُئلت عن تاريخ أو موعد أكاديمي (حذف وإضافة، اختبارات، إجازة...)، استخرج اليوم والتاريخ الهجري والميلادي بدقة تامة وبشكل مباشر.
+5. إذا سُئلت عن قائمة أنشطة أو فعاليات شهر معين، استخرج اسم الفعالية/الأنشطة المذكورة في خطة الأنشطة لهذا الشهر تحديداً واذكر كل نشاط كسطر مستقل بدون تفاصيل الميزانية.
+6. لا تذكر أي مبالغ مالية أو ميزانية في إجابتك مطلقًا إلا إذا طلب السؤال ذلك صراحة بكلمة "ميزانية" أو "مبلغ" أو "تكلفة".
 
 النص المرجعي:
 {corpus}
@@ -314,13 +321,13 @@ if btn and q:
         completion = client.chat.completions.create(
             model="openai/gpt-oss-20b",
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.1,
+            temperature=0.0,
         )
         ans = completion.choices[0].message.content.strip()
     except Exception as e:
         ans = f"خطأ في الاتصال بـ Groq: {e}"
 
-    if not ans:
+    if not ans or OUT in ans:
         ans = OUT
 
     st.markdown(f"<div class='answer-box' dir='rtl'>{ans}</div>", unsafe_allow_html=True)
