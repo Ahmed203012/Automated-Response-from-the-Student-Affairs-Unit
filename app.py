@@ -100,8 +100,12 @@ def normalize_arabic(text: str) -> str:
 
 
 def read_all_chunks():
-    """Read every supported file and return a list of (source_file, chunk_text)."""
+    """Read every supported file and return (chunks, warnings). warnings holds
+    any exception messages hit along the way — surfaced in the UI so real
+    failures (e.g. a missing library on the server) are visible instead of
+    silently falling back to a worse extraction method."""
     chunks = []
+    warnings = []
     for f in sorted(os.listdir(".")):
         low = f.lower()
         if low.endswith(".txt"):
@@ -135,51 +139,59 @@ def read_all_chunks():
                         sample += (p.extract_text() or "")
                     is_reversed = pdf_text_is_reversed(sample)
 
-                    for page in pdf.pages:
-                        text = page.extract_text() or ""
-                        if is_reversed:
-                            text = "\n".join(
-                                unscramble_reversed_arabic_line(l) for l in text.split("\n")
-                            )
-                        # A table's own rows never repeat the month name that
-                        # appears once above it as a heading (e.g. "أنشطة شهر
-                        # أكتوبر 2026م"). Without it, a row for October scores
-                        # the same as one for September and gets lost. Find
-                        # that heading line and stitch it onto every row we
-                        # pull from this page so the month travels with it.
-                        # Collapse whitespace/line-breaks before searching so a
-                        # heading split across two PDF lines (common when a
-                        # title wraps, e.g. "أنشطة" / "شهر أكتوبر 2026م" on
-                        # separate lines) is still found as one phrase.
-                        flat_text = re.sub(r"\s+", " ", text)
-                        heading_match = re.search(r"أنشطة\s+شهر\s+\S+(?:\s+\S+)?", flat_text)
-                        heading = heading_match.group().strip() if heading_match else ""
+                    for page_num, page in enumerate(pdf.pages, start=1):
+                        # Per-page try/except: one broken page must not throw
+                        # away correct extraction for every other page in
+                        # this file (that used to fall back silently to the
+                        # older, unfixed extraction for the WHOLE file).
+                        try:
+                            text = page.extract_text() or ""
+                            if is_reversed:
+                                text = "\n".join(
+                                    unscramble_reversed_arabic_line(l) for l in text.split("\n")
+                                )
+                            # A table's own rows never repeat the month name that
+                            # appears once above it as a heading (e.g. "أنشطة شهر
+                            # أكتوبر 2026م"). Without it, a row for October scores
+                            # the same as one for September and gets lost. Find
+                            # that heading line and stitch it onto every row we
+                            # pull from this page so the month travels with it.
+                            # Collapse whitespace/line-breaks before searching so a
+                            # heading split across two PDF lines (common when a
+                            # title wraps, e.g. "أنشطة" / "شهر أكتوبر 2026م" on
+                            # separate lines) is still found as one phrase.
+                            flat_text = re.sub(r"\s+", " ", text)
+                            heading_match = re.search(r"أنشطة\s+شهر\s+\S+(?:\s+\S+)?", flat_text)
+                            heading = heading_match.group().strip() if heading_match else ""
 
-                        for table in (page.extract_tables() or []):
-                            for row in table:
-                                cells = []
-                                for c in row:
-                                    if not c:
-                                        continue
-                                    c = str(c).strip()
-                                    if is_reversed:
-                                        c = "\n".join(
-                                            unscramble_reversed_arabic_line(l)
-                                            for l in c.split("\n")
-                                        )
-                                    if c:
-                                        cells.append(c)
-                                if cells:
-                                    row_text = " | ".join(cells)
-                                    if heading:
-                                        row_text = f"{heading} — {row_text}"
-                                    chunks.append((f, row_text))
+                            for table in (page.extract_tables() or []):
+                                for row in table:
+                                    cells = []
+                                    for c in row:
+                                        if not c:
+                                            continue
+                                        c = str(c).strip()
+                                        if is_reversed:
+                                            c = "\n".join(
+                                                unscramble_reversed_arabic_line(l)
+                                                for l in c.split("\n")
+                                            )
+                                        if c:
+                                            cells.append(c)
+                                    if cells:
+                                        row_text = " | ".join(cells)
+                                        if heading:
+                                            row_text = f"{heading} — {row_text}"
+                                        chunks.append((f, row_text))
 
-                        for para in re.split(r"\n\s*\n", text):
-                            para = para.strip()
-                            if len(para) > 5:
-                                chunks.append((f, para))
-            except Exception:
+                            for para in re.split(r"\n\s*\n", text):
+                                para = para.strip()
+                                if len(para) > 5:
+                                    chunks.append((f, para))
+                        except Exception as page_err:
+                            warnings.append(f"{f} (صفحة {page_num}): {page_err}")
+            except Exception as file_err:
+                warnings.append(f"{f}: فشل pdfplumber — {file_err}")
                 try:
                     import fitz
                     doc = fitz.open(f)
@@ -189,8 +201,8 @@ def read_all_chunks():
                             para = para.strip()
                             if len(para) > 5:
                                 chunks.append((f, para))
-                except Exception:
-                    pass
+                except Exception as fallback_err:
+                    warnings.append(f"{f}: فشل الاحتياطي أيضًا — {fallback_err}")
         elif low.endswith((".xlsx", ".xls", ".csv")):
             try:
                 import pandas as pd
@@ -215,7 +227,7 @@ def read_all_chunks():
                         chunks.append((f, t))
             except Exception:
                 pass
-    return chunks
+    return chunks, warnings
 
 
 def score_chunk(question_words, question_bigrams, src, chunk_text, prefer_calendar, avoid_excuse):
@@ -282,7 +294,7 @@ def build_relevant_corpus(question, chunks, max_chars=6000, top_k=25):
 
 
 if btn and q:
-    chunks = read_all_chunks()
+    chunks, extraction_warnings = read_all_chunks()
     corpus = build_relevant_corpus(q, chunks, max_chars=8000, top_k=40)
 
     ans = ""
@@ -317,3 +329,11 @@ if btn and q:
 
     st.markdown(f"<div class='answer-box' dir='rtl'>{ans}</div>", unsafe_allow_html=True)
     st.markdown(f"<div class='disclaimer-box' dir='rtl'>{TANWIH}</div>", unsafe_allow_html=True)
+
+    # Hidden by default — only Ahmed needs this. If a file failed to read
+    # properly, the real error shows up here instead of just "not found",
+    # so a screenshot of this box tells us exactly what broke.
+    if extraction_warnings:
+        with st.expander("تفاصيل تقنية (لو احتجت تبلغني بمشكلة)"):
+            for w in extraction_warnings:
+                st.write(w)
