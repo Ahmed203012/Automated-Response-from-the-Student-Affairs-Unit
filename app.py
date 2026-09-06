@@ -44,34 +44,66 @@ STOPWORDS = {
     "الذي", "كم", "لماذا", "مع", "هذا", "هذه", "ذلك", "تلك", "كان", "يكون",
 }
 
-# --- Verified facts override -------------------------------------------------
-# Facts that are frequently extracted wrong from scanned/odd-encoded PDFs
-# (names, titles, emails...) go here in Ahmed's own confirmed wording.
-# This block is ALWAYS included in the reference text sent to the model,
-# regardless of the keyword search below, so it can never get crowded out
-# or mis-extracted from a PDF again. Add more lines here whenever you spot
-# a wrong answer caused by bad text extraction rather than a missing fact.
+# --- Verified facts & Academic Calendar override -----------------------------
 VERIFIED_FACTS = """
 عميد الكلية: الأستاذ الدكتور عبدالله محمد الدهمش
+
+=== التقويم الأكاديمي المعتمد لكليات الرؤية (الفصول الدراسية الثلاثة) ===
+
+--- الفصل الدراسي الأول ---
+- بداية التهيئة والتسجيل للفصل الدراسي الأول: الأحد 1448/03/03 هـ (الموافق 16/08/2026 م)
+- بداية الدراسة للفصل الدراسي الأول: الأحد 1448/03/10 هـ (الموافق 23/08/2026 م)
+- بداية فترة الحذف والإضافة للفصل الدراسي الأول: الأحد 1448/03/10 هـ (الموافق 23/08/2026 م)
+- آخر موعد لتأجيل الفصل الدراسي الأول: الخميس 1448/03/21 هـ (الموافق 03/09/2026 م)
+- نهاية فترة الحذف والإضافة للفصل الدراسي الأول: الخميس 1448/03/21 هـ (الموافق 03/09/2026 م)
+- إجازة اليوم الوطني: الأربعاء والخميس 1448/04/12 - 1448/04/13 هـ (الموافق 23/09/2026 - 24/09/2026 م)
+- بداية اختبارات منتصف الفصل الدراسي الأول: الخميس 1448/04/27 هـ (الموافق 08/10/2026 م)
+- نهاية اختبارات منتصف الفصل الدراسي الأول: الأحد 1448/05/07 هـ (الموافق 18/10/2026 م)
+- إجازة نهاية أسبوع مطولة: الأربعاء والخميس 1448/06/15 - 1448/06/16 هـ (الموافق 25/11/2026 - 26/11/2026 م)
+- آخر موعد للاعتذار عن الفصل الدراسي الأول أو الانسحاب عن دراسة مقرر: الخميس 1448/06/23 هـ (الموافق 03/12/2026 م)
+- بداية الاختبارات النهائية للفصل الدراسي الأول: الأحد 1448/07/11 هـ (الموافق 20/12/2026 م)
+- نهاية الاختبارات النهائية للفصل الدراسي الأول: السبت 1448/07/24 هـ (الموافق 02/01/2027 م)
+- بداية إجازة منتصف العام الدراسي: الأحد 1448/07/25 هـ (الموافق 03/01/2027 م)
+
+--- الفصل الدراسي الثاني ---
+- بداية التهيئة والتسجيل للفصل الدراسي الثاني: الأحد 1448/08/02 هـ (الموافق 10/01/2027 م)
+- بداية الدراسة للفصل الدراسي الثاني: الأحد 1448/08/09 هـ (الموافق 17/01/2027 م)
+- بداية فترة الحذف والإضافة للفصل الدراسي الثاني: الأحد 1448/08/09 هـ (الموافق 17/01/2027 م)
+- آخر موعد لتأجيل الفصل الدراسي الثاني: الخميس 1448/08/20 هـ (الموافق 28/01/2027 م)
+- نهاية فترة الحذف والإضافة للفصل الدراسي الثاني: الخميس 1448/08/20 هـ (الموافق 28/01/2027 م)
+- إجازة يوم التأسيس: الأحد والاثنين 1448/09/14 - 1448/09/15 هـ (الموافق 21/02/2027 - 22/02/2027 م)
+- بداية إجازة عيد الفطر: الثلاثاء 1448/09/16 هـ (الموافق 23/02/2027 م)
+- بداية الدراسة بعد إجازة عيد الفطر: الأحد 1448/10/06 هـ (الموافق 14/03/2027 م)
+- بداية اختبارات منتصف الفصل الدراسي الثاني: الخميس 1448/10/17 هـ (الموافق 25/03/2027 م)
+- نهاية اختبارات منتصف الفصل الدراسي الثاني: الأحد 1448/10/27 هـ (الموافق 04/04/2027 م)
+- آخر موعد للاعتذار عن الفصل الدراسي الثاني أو الانسحاب عن مقرر: الخميس 1448/12/07 هـ (الموافق 13/05/2027 م)
+- بداية إجازة عيد الأضحى: نهاية دوام يوم الخميس 1448/12/07 هـ (الموافق 13/05/2027 م)
+- بداية الدراسة بعد إجازة عيد الأضحى: الأحد 1448/12/17 هـ (الموافق 23/05/2027 م)
+- بداية الاختبارات النهائية للفصل الدراسي الثاني: الأحد 1449/01/01 هـ (الموافق 06/06/2027 م)
+- نهاية الاختبارات النهائية للفصل الدراسي الثاني: السبت 1449/01/14 هـ (الموافق 19/06/2027 م)
+- بداية إجازة نهاية العام الدراسي: الأحد 1449/01/15 هـ (الموافق 20/06/2027 م)
+
+--- الفصل الدراسي الصيفي ---
+- بداية التهيئة والتسجيل للفصل الصيفي: الأحد 1449/01/15 هـ (الموافق 20/06/2027 م)
+- بداية الدراسة للفصل الصيفي: الأحد 1449/01/22 هـ (الموافق 27/06/2027 م)
+- بداية فترة الحذف والإضافة للفصل الصيفي: الأحد 1449/01/22 هـ (الموافق 27/06/2027 م)
+- نهاية فترة الحذف والإضافة للفصل الصيفي: الخميس 1449/01/26 هـ (الموافق 01/07/2027 م)
+- بداية اختبارات منتصف الفصل الصيفي: الأحد 1449/02/14 هـ (الموافق 18/07/2027 م)
+- نهاية اختبارات منتصف الفصل الصيفي: السبت 1449/02/20 هـ (الموافق 24/07/2027 م)
+- آخر موعد للاعتذار عن الفصل الصيفي أو الانسحاب عن مقرر: الأحد 1449/02/21 هـ (الموافق 25/07/2027 م)
+- بداية الاختبارات النهائية للفصل الصيفي: الأحد 1449/03/06 هـ (الموافق 08/08/2027 م)
+- نهاية الاختبارات النهائية للفصل الصيفي: السبت 1449/03/12 هـ (الموافق 14/08/2027 م)
+- بداية إجازة نهاية العام الدراسي: الأحد 1449/03/13 هـ (الموافق 15/08/2027 م)
+- بداية الدراسة للعام الدراسي الجديد 1448-1449 هـ: الأحد 1449/03/20 هـ (الموافق 22/08/2027 م)
 """
 
-# Words that signal the question is about official college holidays
-# (اليوم الوطني، الإجازات المطولة...) as opposed to a personal excuse/leave
-# (عذر وفاة، عذر ولادة، إجازة مرضية...). Both use the root "إجاز" in Arabic,
-# so plain keyword matching confuses them — this list lets us tell them apart.
 HOLIDAY_WORDS = {"اجازه", "اجازات", "عطله", "عطلات", "عطل"}
 EXCUSE_WORDS = {"عذر", "اعذار", "وفاه", "ولاده", "مرضيه", "مرض", "مريض"}
-# Filenames that hold personal-excuse rules rather than the official calendar.
 EXCUSE_SOURCE_HINTS = ("excuse", "عذر")
 CALENDAR_SOURCE_HINTS = ("تقويم", "calendar")
 
 
 def unscramble_reversed_arabic_line(line: str) -> str:
-    """Undo a specific PDF export bug where each line's characters come out
-    in mirrored (reversed) order — e.g. "ةطخ" instead of "خطة". Reversing the
-    whole line fixes the Arabic word order, but it also flips any digit or
-    Latin-letter runs inside it (2026 -> 6202), so those runs get flipped
-    back afterward."""
     rev = line[::-1]
     rev = re.sub(r"[A-Za-z0-9]+", lambda m: m.group()[::-1], rev)
     return rev
@@ -81,9 +113,6 @@ _COMMON_ARABIC_WORDS = ("الكلية", "الطلاب", "برنامج", "الر�
 
 
 def pdf_text_is_reversed(sample_text: str) -> bool:
-    """Detect the mirrored-text bug from a small text sample, so the fix is
-    only applied to PDFs that actually have it — most PDFs extract normally
-    and must not be touched."""
     if any(w in sample_text for w in _COMMON_ARABIC_WORDS):
         return False
     fixed = "\n".join(unscramble_reversed_arabic_line(l) for l in sample_text.split("\n"))
@@ -91,7 +120,6 @@ def pdf_text_is_reversed(sample_text: str) -> bool:
 
 
 def normalize_arabic(text: str) -> str:
-    """Light normalization so 'العميد' and 'عميد' etc. match better."""
     text = re.sub(r"[إأآا]", "ا", text)
     text = re.sub(r"ى", "ي", text)
     text = re.sub(r"ة", "ه", text)
@@ -100,10 +128,6 @@ def normalize_arabic(text: str) -> str:
 
 
 def read_all_chunks():
-    """Read every supported file and return (chunks, warnings). warnings holds
-    any exception messages hit along the way — surfaced in the UI so real
-    failures (e.g. a missing library on the server) are visible instead of
-    silently falling back to a worse extraction method."""
     chunks = []
     warnings = []
     for f in sorted(os.listdir(".")):
@@ -122,44 +146,21 @@ def read_all_chunks():
                 except Exception:
                     pass
         elif low.endswith(".pdf"):
-            # Tables (like the academic calendar or the monthly activity plan)
-            # get scrambled by plain text extraction — a date/row can end up
-            # detached from context. Try pdfplumber's table extraction first
-            # so each row stays intact, then ALSO pull plain paragraph text
-            # so nothing else is lost.
             try:
                 import pdfplumber
                 with pdfplumber.open(f) as pdf:
-                    # Some PDFs (depending on how they were exported) come out
-                    # with every line's characters mirrored/reversed. Check a
-                    # small sample once per file and fix every page the same
-                    # way — most files are fine and are left untouched.
                     sample = ""
                     for p in pdf.pages[:2]:
                         sample += (p.extract_text() or "")
                     is_reversed = pdf_text_is_reversed(sample)
 
                     for page_num, page in enumerate(pdf.pages, start=1):
-                        # Per-page try/except: one broken page must not throw
-                        # away correct extraction for every other page in
-                        # this file (that used to fall back silently to the
-                        # older, unfixed extraction for the WHOLE file).
                         try:
                             text = page.extract_text() or ""
                             if is_reversed:
                                 text = "\n".join(
                                     unscramble_reversed_arabic_line(l) for l in text.split("\n")
                                 )
-                            # A table's own rows never repeat the month name that
-                            # appears once above it as a heading (e.g. "أنشطة شهر
-                            # أكتوبر 2026م"). Without it, a row for October scores
-                            # the same as one for September and gets lost. Find
-                            # that heading line and stitch it onto every row we
-                            # pull from this page so the month travels with it.
-                            # Collapse whitespace/line-breaks before searching so a
-                            # heading split across two PDF lines (common when a
-                            # title wraps, e.g. "أنشطة" / "شهر أكتوبر 2026م" on
-                            # separate lines) is still found as one phrase.
                             flat_text = re.sub(r"\s+", " ", text)
                             heading_match = re.search(r"أنشطة\s+شهر\s+\S+(?:\s+\S+)?", flat_text)
                             heading = heading_match.group().strip() if heading_match else ""
@@ -236,8 +237,6 @@ def score_chunk(question_words, question_bigrams, src, chunk_text, prefer_calend
     for w in question_words:
         if w in norm_chunk:
             score += 1
-    # A matched two-word phrase (e.g. "بداية اختبارات") is much stronger
-    # evidence than the same two words scattered far apart in the text.
     for bg in question_bigrams:
         if bg in norm_chunk:
             score += 3
@@ -252,14 +251,10 @@ def score_chunk(question_words, question_bigrams, src, chunk_text, prefer_calend
 
 
 def build_relevant_corpus(question, chunks, max_chars=6000, top_k=25):
-    """Pick the chunks most relevant to the question instead of blindly
-    taking the first N characters of the whole corpus."""
     norm_q = normalize_arabic(question)
     q_words = [w for w in re.split(r"\s+", norm_q) if w and w not in STOPWORDS and len(w) > 1]
     q_bigrams = [f"{a} {b}" for a, b in zip(q_words, q_words[1:])]
 
-    # Tell "official holidays" questions apart from "personal excuse" questions
-    # — both use the root "إجاز" in Arabic, so they'd otherwise collide.
     asks_about_holiday = any(w in HOLIDAY_WORDS for w in q_words)
     asks_about_excuse = any(w in EXCUSE_WORDS for w in q_words)
     prefer_calendar = asks_about_holiday and not asks_about_excuse
@@ -288,8 +283,6 @@ def build_relevant_corpus(question, chunks, max_chars=6000, top_k=25):
         selected.append(f"[{src}] {c}")
         total_len += len(c)
 
-    # Verified facts always go in, on top, regardless of the keyword search
-    # above — so a name/title never gets crowded out or mis-extracted again.
     return VERIFIED_FACTS + "\n" + "\n".join(selected)
 
 
@@ -303,6 +296,7 @@ if btn and q:
         client = Groq(api_key=st.secrets["GROQ_API_KEY"])
         prompt = f"""أنت مساعد شؤون الطلبة في كليات الرؤية بالرياض.
 أجب باختصار شديد سطر أو سطرين فقط ومن النص المرجعي فقط.
+- إذا سألت عن تاريخ أو موعد أكاديمي (حذف وإضافة، اختبارات، إجازة...)، استخرج اليوم والتاريخ الهجري والميلادي بدقة تامة وبشكل مباشر دون ذكر عبارات مثل "بناءً على التقويم".
 - لا تخلط: عذر الوفاة = 5 أيام + تقديم خلال أسبوع، عذر الولادة = أسبوع واحد + تقديم خلال 10 أيام، العذر الطبي/الحوادث = 3 أيام عمل.
 - إذا سُئلت عن عميد أو وكيل أو ايميل ابحث عن الاسم بالضبط.
 - لا تذكر أي مبالغ مالية أو ميزانية في إجابتك مطلقًا إلا إذا طلب السؤال ذلك صراحة بكلمة "ميزانية" أو "مبلغ" أو "تكلفة".
@@ -330,80 +324,7 @@ if btn and q:
     st.markdown(f"<div class='answer-box' dir='rtl'>{ans}</div>", unsafe_allow_html=True)
     st.markdown(f"<div class='disclaimer-box' dir='rtl'>{TANWIH}</div>", unsafe_allow_html=True)
 
-    # Hidden by default — only Ahmed needs this. If a file failed to read
-    # properly, the real error shows up here instead of just "not found",
-    # so a screenshot of this box tells us exactly what broke.
     if extraction_warnings:
         with st.expander("تفاصيل تقنية (لو احتجت تبلغني بمشكلة)"):
             for w in extraction_warnings:
                 st.write(w)
-# =========================================================
-# بيانات التقويم الأكاديمي المنسقة لقراءة الذكاء الاصطناعي
-# =========================================================
-ACADEMIC_CALENDAR = """
-التقويم الأكاديمي المعتمد لكليات الرؤية (الفصول الدراسية الثلاثة):
-
---- الفصل الدراسي الأول ---
-- بداية التهيئة والتسجيل للفصل الدراسي الأول: الأحد 1448/03/03 هـ (الموافق 16/08/2026 م)
-- بداية الدراسة للفصل الدراسي الأول: الأحد 1448/03/10 هـ (الموافق 23/08/2026 م)
-- بداية فترة الحذف والإضافة للفصل الدراسي الأول: الأحد 1448/03/10 هـ (الموافق 23/08/2026 م)
-- آخر موعد لتأجيل الفصل الدراسي الأول: الخميس 1448/03/21 هـ (الموافق 03/09/2026 م)
-- نهاية فترة الحذف والإضافة للفصل الدراسي الأول: الخميس 1448/03/21 هـ (الموافق 03/09/2026 م)
-- إجازة اليوم الوطني: الأربعاء والخميس 1448/04/12 - 1448/04/13 هـ (الموافق 23/09/2026 - 24/09/2026 م)
-- بداية اختبارات منتصف الفصل الدراسي الأول: الخميس 1448/04/27 هـ (الموافق 08/10/2026 م)
-- نهاية اختبارات منتصف الفصل الدراسي الأول: الأحد 1448/05/07 هـ (الموافق 18/10/2026 م)
-- إجازة نهاية أسبوع مطولة: الأربعاء والخميس 1448/06/15 - 1448/06/16 هـ (الموافق 25/11/2026 - 26/11/2026 م)
-- آخر موعد للاعتذار عن الفصل الدراسي الأول أو الانسحاب عن دراسة مقرر: الخميس 1448/06/23 هـ (الموافق 03/12/2026 م)
-- بداية الاختبارات النهائية للفصل الدراسي الأول: الأحد 1448/07/11 هـ (الموافق 20/12/2026 م)
-- نهاية الاختبارات النهائية للفصل الدراسي الأول: السبت 1448/07/24 هـ (الموافق 02/01/2027 م)
-- بداية إجازة منتصف العام الدراسي: الأحد 1448/07/25 هـ (الموافق 03/01/2027 م)
-
---- الفصل الدراسي الثاني ---
-- بداية التهيئة والتسجيل للفصل الدراسي الثاني: الأحد 1448/08/02 هـ (الموافق 10/01/2027 م)
-- بداية الدراسة للفصل الدراسي الثاني: الأحد 1448/08/09 هـ (الموافق 17/01/2027 م)
-- بداية فترة الحذف والإضافة للفصل الدراسي الثاني: الأحد 1448/08/09 هـ (الموافق 17/01/2027 م)
-- آخر موعد لتأجيل الفصل الدراسي الثاني: الخميس 1448/08/20 هـ (الموافق 28/01/2027 م)
-- نهاية فترة الحذف والإضافة للفصل الدراسي الثاني: الخميس 1448/08/20 هـ (الموافق 28/01/2027 م)
-- إجازة يوم التأسيس: الأحد والاثنين 1448/09/14 - 1448/09/15 هـ (الموافق 21/02/2027 - 22/02/2027 م)
-- بداية إجازة عيد الفطر: الثلاثاء 1448/09/16 هـ (الموافق 23/02/2027 م)
-- بداية الدراسة بعد إجازة عيد الفطر: الأحد 1448/10/06 هـ (الموافق 14/03/2027 م)
-- بداية اختبارات منتصف الفصل الدراسي الثاني: الخميس 1448/10/17 هـ (الموافق 25/03/2027 م)
-- نهاية اختبارات منتصف الفصل الدراسي الثاني: الأحد 1448/10/27 هـ (الموافق 04/04/2027 م)
-- آخر موعد للاعتذار عن الفصل الدراسي الثاني أو الانسحاب عن مقرر: الخميس 1448/12/07 هـ (الموافق 13/05/2027 م)
-- بداية إجازة عيد الأضحى: نهاية دوام يوم الخميس 1448/12/07 هـ (الموافق 13/05/2027 م)
-- بداية الدراسة بعد إجازة عيد الأضحى: الأحد 1448/12/17 هـ (الموافق 23/05/2027 م)
-- بداية الاختبارات النهائية للفصل الدراسي الثاني: الأحد 1449/01/01 هـ (الموافق 06/06/2027 م)
-- نهاية الاختبارات النهائية للفصل الدراسي الثاني: السبت 1449/01/14 هـ (الموافق 19/06/2027 م)
-- بداية إجازة نهاية العام الدراسي: الأحد 1449/01/15 هـ (الموافق 20/06/2027 م)
-
---- الفصل الدراسي الصيفي ---
-- بداية التهيئة والتسجيل للفصل الصيفي: الأحد 1449/01/15 هـ (الموافق 20/06/2027 م)
-- بداية الدراسة للفصل الصيفي: الأحد 1449/01/22 هـ (الموافق 27/06/2027 م)
-- بداية فترة الحذف والإضافة للفصل الصيفي: الأحد 1449/01/22 هـ (الموافق 27/06/2027 م)
-- نهاية فترة الحذف والإضافة للفصل الصيفي: الخميس 1449/01/26 هـ (الموافق 01/07/2027 م)
-- بداية اختبارات منتصف الفصل الصيفي: الأحد 1449/02/14 هـ (الموافق 18/07/2027 م)
-- نهاية اختبارات منتصف الفصل الصيفي: السبت 1449/02/20 هـ (الموافق 24/07/2027 م)
-- آخر موعد للاعتذار عن الفصل الصيفي أو الانسحاب عن مقرر: الأحد 1449/02/21 هـ (الموافق 25/07/2027 م)
-- بداية الاختبارات النهائية للفصل الصيفي: الأحد 1449/03/06 هـ (الموافق 08/08/2027 م)
-- نهاية الاختبارات النهائية للفصل الصيفي: السبت 1449/03/12 هـ (الموافق 14/08/2027 م)
-- بداية إجازة نهاية العام الدراسي: الأحد 1449/03/13 هـ (الموافق 15/08/2027 م)
-- بداية الدراسة للعام الدراسي الجديد 1448-1449 هـ: الأحد 1449/03/20 هـ (الموافق 22/08/2027 م)
-"""
-
-# =========================================================
-# تضمين البيانات داخل الـ Prompt الموجه للنموذج
-# =========================================================
-prompt = f"""
-أنت مساعد آلي ذكي وخاص بوحدة شؤون الطلبة في كليات الرؤية بالرياض.
-
-البيانات والأوقات المعتمدة للتقويم الأكاديمي:
-{ACADEMIC_CALENDAR}
-
-سؤال الطالب الحالي: "{user_query}"
-
-التعليمات الصارمة عند الإجابة:
-1. استخرج التاريخ الهجري والميلادي واليوم بدقة كاملة وبشكل مباشر من التقويم المرفق أعلاه.
-2. إذا سأل الطالب عن "بداية الحذف والإضافة" أو أي حدث آخر، اذكر له اليوم والتاريخ الهجري والتاريخ الميلادي بدقة.
-3. يمنع منعاً باتاً ذكر عبارات مثل "بناءً على الكود"، "بناءً على التقويم"، أو "حسب البيانات". أجب الطالب مباشرة.
-4. حافظ على أسلوب رسمي ومرحب بأسلوب شؤون الطلاب.
-"""
