@@ -42,6 +42,27 @@ STOPWORDS = {
     "الذي", "كم", "لماذا", "مع", "هذا", "هذه", "ذلك", "تلك", "كان", "يكون",
 }
 
+# --- Verified facts override -------------------------------------------------
+# Facts that are frequently extracted wrong from scanned/odd-encoded PDFs
+# (names, titles, emails...) go here in Ahmed's own confirmed wording.
+# This block is ALWAYS included in the reference text sent to the model,
+# regardless of the keyword search below, so it can never get crowded out
+# or mis-extracted from a PDF again. Add more lines here whenever you spot
+# a wrong answer caused by bad text extraction rather than a missing fact.
+VERIFIED_FACTS = """
+عميد الكلية: الأستاذ الدكتور عبدالله محمد الدهمش
+"""
+
+# Words that signal the question is about official college holidays
+# (اليوم الوطني، الإجازات المطولة...) as opposed to a personal excuse/leave
+# (عذر وفاة، عذر ولادة، إجازة مرضية...). Both use the root "إجاز" in Arabic,
+# so plain keyword matching confuses them — this list lets us tell them apart.
+HOLIDAY_WORDS = {"اجازه", "اجازات", "عطله", "عطلات", "عطل"}
+EXCUSE_WORDS = {"عذر", "اعذار", "وفاه", "ولاده", "مرضيه", "مرض", "مريض"}
+# Filenames that hold personal-excuse rules rather than the official calendar.
+EXCUSE_SOURCE_HINTS = ("excuse", "عذر")
+CALENDAR_SOURCE_HINTS = ("تقويم", "calendar")
+
 
 def normalize_arabic(text: str) -> str:
     """Light normalization so 'العميد' and 'عميد' etc. match better."""
@@ -71,17 +92,50 @@ def read_all_chunks():
                 except Exception:
                     pass
         elif low.endswith(".pdf"):
+            # Tables (like the academic calendar or the monthly activity plan)
+            # get scrambled by plain text extraction — a date/row can end up
+            # detached from context. Try pdfplumber's table extraction first
+            # so each row stays intact, then ALSO pull plain paragraph text
+            # so nothing else is lost.
             try:
-                import fitz
-                doc = fitz.open(f)
-                for page in doc:
-                    text = page.get_text()
-                    for para in re.split(r"\n\s*\n", text):
-                        para = para.strip()
-                        if len(para) > 5:
-                            chunks.append((f, para))
+                import pdfplumber
+                with pdfplumber.open(f) as pdf:
+                    for page in pdf.pages:
+                        text = page.extract_text() or ""
+                        # A table's own rows never repeat the month name that
+                        # appears once above it as a heading (e.g. "أنشطة شهر
+                        # أكتوبر 2026م"). Without it, a row for October scores
+                        # the same as one for September and gets lost. Find
+                        # that heading line and stitch it onto every row we
+                        # pull from this page so the month travels with it.
+                        heading_match = re.search(r"[^\n]*أنشطة\s+شهر[^\n]*", text)
+                        heading = heading_match.group().strip() if heading_match else ""
+
+                        for table in (page.extract_tables() or []):
+                            for row in table:
+                                cells = [str(c).strip() for c in row if c and str(c).strip()]
+                                if cells:
+                                    row_text = " | ".join(cells)
+                                    if heading:
+                                        row_text = f"{heading} — {row_text}"
+                                    chunks.append((f, row_text))
+
+                        for para in re.split(r"\n\s*\n", text):
+                            para = para.strip()
+                            if len(para) > 5:
+                                chunks.append((f, para))
             except Exception:
-                pass
+                try:
+                    import fitz
+                    doc = fitz.open(f)
+                    for page in doc:
+                        text = page.get_text()
+                        for para in re.split(r"\n\s*\n", text):
+                            para = para.strip()
+                            if len(para) > 5:
+                                chunks.append((f, para))
+                except Exception:
+                    pass
         elif low.endswith((".xlsx", ".xls", ".csv")):
             try:
                 import pandas as pd
@@ -109,12 +163,24 @@ def read_all_chunks():
     return chunks
 
 
-def score_chunk(question_words, chunk_text):
+def score_chunk(question_words, question_bigrams, src, chunk_text, prefer_calendar, avoid_excuse):
     norm_chunk = normalize_arabic(chunk_text)
     score = 0
     for w in question_words:
         if w in norm_chunk:
             score += 1
+    # A matched two-word phrase (e.g. "بداية اختبارات") is much stronger
+    # evidence than the same two words scattered far apart in the text.
+    for bg in question_bigrams:
+        if bg in norm_chunk:
+            score += 3
+
+    src_low = src.lower()
+    if avoid_excuse and any(h in src_low or h in src for h in EXCUSE_SOURCE_HINTS):
+        score -= 5
+    if prefer_calendar and any(h in src_low or h in src for h in CALENDAR_SOURCE_HINTS):
+        score += 3
+
     return score
 
 
@@ -123,20 +189,29 @@ def build_relevant_corpus(question, chunks, max_chars=6000, top_k=25):
     taking the first N characters of the whole corpus."""
     norm_q = normalize_arabic(question)
     q_words = [w for w in re.split(r"\s+", norm_q) if w and w not in STOPWORDS and len(w) > 1]
+    q_bigrams = [f"{a} {b}" for a, b in zip(q_words, q_words[1:])]
+
+    # Tell "official holidays" questions apart from "personal excuse" questions
+    # — both use the root "إجاز" in Arabic, so they'd otherwise collide.
+    asks_about_holiday = any(w in HOLIDAY_WORDS for w in q_words)
+    asks_about_excuse = any(w in EXCUSE_WORDS for w in q_words)
+    prefer_calendar = asks_about_holiday and not asks_about_excuse
+    avoid_excuse = asks_about_holiday and not asks_about_excuse
 
     if not q_words or not chunks:
-        # fallback: just take from the start if we truly can't score anything
         joined = "\n".join(c for _, c in chunks)
-        return joined[:max_chars]
+        return VERIFIED_FACTS + "\n" + joined[:max_chars]
 
-    scored = [(score_chunk(q_words, c), src, c) for src, c in chunks]
+    scored = [
+        (score_chunk(q_words, q_bigrams, src, c, prefer_calendar, avoid_excuse), src, c)
+        for src, c in chunks
+    ]
     scored = [s for s in scored if s[0] > 0]
     scored.sort(key=lambda x: x[0], reverse=True)
 
     if not scored:
-        # no keyword overlap found anywhere — fall back to a broader slice
         joined = "\n".join(c for _, c in chunks)
-        return joined[:max_chars]
+        return VERIFIED_FACTS + "\n" + joined[:max_chars]
 
     selected = []
     total_len = 0
@@ -146,12 +221,14 @@ def build_relevant_corpus(question, chunks, max_chars=6000, top_k=25):
         selected.append(f"[{src}] {c}")
         total_len += len(c)
 
-    return "\n".join(selected)
+    # Verified facts always go in, on top, regardless of the keyword search
+    # above — so a name/title never gets crowded out or mis-extracted again.
+    return VERIFIED_FACTS + "\n" + "\n".join(selected)
 
 
 if btn and q:
     chunks = read_all_chunks()
-    corpus = build_relevant_corpus(q, chunks, max_chars=6000, top_k=25)
+    corpus = build_relevant_corpus(q, chunks, max_chars=8000, top_k=40)
 
     ans = ""
     try:
@@ -161,6 +238,8 @@ if btn and q:
 أجب باختصار شديد سطر أو سطرين فقط ومن النص المرجعي فقط.
 - لا تخلط: عذر الوفاة = 5 أيام + تقديم خلال أسبوع، عذر الولادة = أسبوع واحد + تقديم خلال 10 أيام، العذر الطبي/الحوادث = 3 أيام عمل.
 - إذا سُئلت عن عميد أو وكيل أو ايميل ابحث عن الاسم بالضبط.
+- لا تذكر أي مبالغ مالية أو ميزانية في إجابتك مطلقًا إلا إذا طلب السؤال ذلك صراحة بكلمة "ميزانية" أو "مبلغ" أو "تكلفة".
+- إذا كان السؤال عن قائمة أنشطة أو فعاليات شهر معين، اذكر كل نشاط مطابق لذلك الشهر تحديدًا كسطر مستقل (اسم النشاط فقط)، بدون تفاصيل الميزانية، ولا تخلطه بأنشطة شهر آخر.
 - إذا لم تجد قل: {OUT}
 
 النص المرجعي:
