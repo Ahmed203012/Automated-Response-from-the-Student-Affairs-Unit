@@ -66,6 +66,30 @@ EXCUSE_SOURCE_HINTS = ("excuse", "عذر")
 CALENDAR_SOURCE_HINTS = ("تقويم", "calendar")
 
 
+def unscramble_reversed_arabic_line(line: str) -> str:
+    """Undo a specific PDF export bug where each line's characters come out
+    in mirrored (reversed) order — e.g. "ةطخ" instead of "خطة". Reversing the
+    whole line fixes the Arabic word order, but it also flips any digit or
+    Latin-letter runs inside it (2026 -> 6202), so those runs get flipped
+    back afterward."""
+    rev = line[::-1]
+    rev = re.sub(r"[A-Za-z0-9]+", lambda m: m.group()[::-1], rev)
+    return rev
+
+
+_COMMON_ARABIC_WORDS = ("الكلية", "الطلاب", "برنامج", "الرياض", "الأنشطة")
+
+
+def pdf_text_is_reversed(sample_text: str) -> bool:
+    """Detect the mirrored-text bug from a small text sample, so the fix is
+    only applied to PDFs that actually have it — most PDFs extract normally
+    and must not be touched."""
+    if any(w in sample_text for w in _COMMON_ARABIC_WORDS):
+        return False
+    fixed = "\n".join(unscramble_reversed_arabic_line(l) for l in sample_text.split("\n"))
+    return any(w in fixed for w in _COMMON_ARABIC_WORDS)
+
+
 def normalize_arabic(text: str) -> str:
     """Light normalization so 'العميد' and 'عميد' etc. match better."""
     text = re.sub(r"[إأآا]", "ا", text)
@@ -102,8 +126,21 @@ def read_all_chunks():
             try:
                 import pdfplumber
                 with pdfplumber.open(f) as pdf:
+                    # Some PDFs (depending on how they were exported) come out
+                    # with every line's characters mirrored/reversed. Check a
+                    # small sample once per file and fix every page the same
+                    # way — most files are fine and are left untouched.
+                    sample = ""
+                    for p in pdf.pages[:2]:
+                        sample += (p.extract_text() or "")
+                    is_reversed = pdf_text_is_reversed(sample)
+
                     for page in pdf.pages:
                         text = page.extract_text() or ""
+                        if is_reversed:
+                            text = "\n".join(
+                                unscramble_reversed_arabic_line(l) for l in text.split("\n")
+                            )
                         # A table's own rows never repeat the month name that
                         # appears once above it as a heading (e.g. "أنشطة شهر
                         # أكتوبر 2026م"). Without it, a row for October scores
@@ -120,7 +157,18 @@ def read_all_chunks():
 
                         for table in (page.extract_tables() or []):
                             for row in table:
-                                cells = [str(c).strip() for c in row if c and str(c).strip()]
+                                cells = []
+                                for c in row:
+                                    if not c:
+                                        continue
+                                    c = str(c).strip()
+                                    if is_reversed:
+                                        c = "\n".join(
+                                            unscramble_reversed_arabic_line(l)
+                                            for l in c.split("\n")
+                                        )
+                                    if c:
+                                        cells.append(c)
                                 if cells:
                                     row_text = " | ".join(cells)
                                     if heading:
