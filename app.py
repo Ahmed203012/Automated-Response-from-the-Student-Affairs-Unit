@@ -10,6 +10,8 @@ div[data-testid="stImage"] { display:flex!important; justify-content:center!impo
 div[data-testid="stButton"] > button { background:#c5a880!important; color:white!important; border-radius:14px!important; width:100%!important; font-weight:bold!important; font-size:17px!important; padding:12px!important; }
 .answer-box { background:#eaf7f0; padding:22px; border-radius:12px; border:1px solid #c3e6cb; font-size:18px; line-height:2; }
 .disclaimer-box { background:#fef9e7; padding:16px; border-radius:12px; border:1px solid #f5d78e; margin-top:18px; font-size:14px; }
+/* يخفي تلميح Streamlit التلقائي بالإنجليزي ("Press Enter to apply") تحت خانة الكتابة */
+div[data-testid="InputInstructions"] { display:none !important; }
 </style>
 """, unsafe_allow_html=True)
 
