@@ -10,8 +10,18 @@ div[data-testid="stImage"] { display:flex!important; justify-content:center!impo
 div[data-testid="stButton"] > button { background:#c5a880!important; color:white!important; border-radius:14px!important; width:100%!important; font-weight:bold!important; font-size:17px!important; padding:12px!important; }
 .answer-box { background:#eaf7f0; padding:22px; border-radius:12px; border:1px solid #c3e6cb; font-size:18px; line-height:2; }
 .disclaimer-box { background:#fef9e7; padding:16px; border-radius:12px; border:1px solid #f5d78e; margin-top:18px; font-size:14px; }
-/* يخفي تلميح Streamlit التلقائي بالإنجليزي ("Press Enter to apply") تحت خانة الكتابة */
+
+/* --- إخفاء كل العناصر الإضافية والشريط العلوي وشريط Streamlit تماماً --- */
+#MainMenu {visibility: hidden !important;}
+header {visibility: hidden !important;}
+footer {visibility: hidden !important;}
+div[data-testid="stHeader"] {display: none !important;}
+div[data-testid="stToolbar"] {display: none !important;}
+div[data-testid="stDecoration"] {display: none !important;}
+div[data-testid="stStatusWidget"] {display: none !important;}
 div[data-testid="InputInstructions"] { display:none !important; }
+.stAppDeployButton {display:none !important;}
+[data-testid="manage-app-button"] {display: none !important;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -285,7 +295,7 @@ def score_chunk(question_words, question_bigrams, src, chunk_text, prefer_calend
     if prefer_calendar and any(h in src_low or h in src_norm for h in CALENDAR_SOURCE_HINTS):
         score += 3
     if prefer_activity and any(h in src_low or h in src_norm for h in ACTIVITY_SOURCE_HINTS):
-        score += 8  # إعطاء أولوية مرتفعة لملف الأنشطة عند السؤال عنها
+        score += 8
 
     return score
 
@@ -311,7 +321,6 @@ def build_relevant_corpus(question, chunks, max_chars=8000, top_k=35):
         for src, c in chunks
     ]
     
-    # إذا كان السؤال عن الأنشطة، نلتقط أجزاء ملف الأنشطة حتى لو لم ينطبق السكور التلقائي عليها بشكل كامل
     if prefer_activity:
         for idx, (sc, src, c) in enumerate(scored):
             src_norm = normalize_arabic(src)
@@ -336,14 +345,16 @@ def build_relevant_corpus(question, chunks, max_chars=8000, top_k=35):
     return VERIFIED_FACTS + "\n" + "\n".join(selected)
 
 if btn and q:
-    chunks, extraction_warnings = read_all_chunks()
-    corpus = build_relevant_corpus(q, chunks, max_chars=10000, top_k=50)
+    # إظهار دائرية/علامة التحميل أثناء تجهيز واستخراج الإجابة
+    with st.spinner("جاري جلب الإجابة..."):
+        chunks, extraction_warnings = read_all_chunks()
+        corpus = build_relevant_corpus(q, chunks, max_chars=10000, top_k=50)
 
-    ans = ""
-    try:
-        from groq import Groq
-        client = Groq(api_key=st.secrets["GROQ_API_KEY"])
-        prompt = f"""أنت مساعد شؤون الطلبة في كليات الرؤية بالرياض.
+        ans = ""
+        try:
+            from groq import Groq
+            client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+            prompt = f"""أنت مساعد شؤون الطلبة في كليات الرؤية بالرياض.
 مهمتك:
 1. استخرج الإجابة بدقة من "النص المرجعي" المرفق فقط.
 2. إذا سُئلت عن أنشطة أو فعاليات شهر معين (مثل أكتوبر، نوفمبر، إلخ)، اذكر جميع الأنشطة والفعاليات الخاصة بهذا الشهر المذكورة في النص المرجعي على شكل نقاط أو أسطر مستقلة.
@@ -357,17 +368,17 @@ if btn and q:
 السؤال: {q}
 الإجابة:"""
 
-        completion = client.chat.completions.create(
-            model="openai/gpt-oss-20b",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.0,
-        )
-        ans = completion.choices[0].message.content.strip()
-    except Exception as e:
-        ans = f"خطأ في الاتصال بـ Groq: {e}"
+            completion = client.chat.completions.create(
+                model="openai/gpt-oss-20b",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.0,
+            )
+            ans = completion.choices[0].message.content.strip()
+        except Exception as e:
+            ans = f"خطأ في الاتصال بـ Groq: {e}"
 
-    if not ans or OUT in ans:
-        ans = OUT
+        if not ans or OUT in ans:
+            ans = OUT
 
     st.markdown(f"<div class='answer-box' dir='rtl'>{ans}</div>", unsafe_allow_html=True)
     st.markdown(f"<div class='disclaimer-box' dir='rtl'>{TANWIH}</div>", unsafe_allow_html=True)
