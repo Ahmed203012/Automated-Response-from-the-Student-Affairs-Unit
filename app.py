@@ -24,7 +24,7 @@ with c2:
 
 st.markdown("<h1 style='text-align:center!important; font-size:32px!important;'>كليات الرؤية - Vision Colleges</h1>", unsafe_allow_html=True)
 st.markdown("<h2 style='text-align:center!important; font-size:26px!important;'>الاستفسار الآلي - وحدة شؤون الطلبة</h2>", unsafe_allow_html=True)
-st.markdown("<p style='text-align:center!important; font-size:18px!important;'>مرحبا بكم في كلية الرؤية بالرياض، نرحب باستفساركم حول لوائح وأنظمة الكلية.</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align:center!important; font-size:18px!important;'>مرحبا بكم في كلية الرؤية بالرياض، نرحب باستفساركم حول لوائح وأنظمة الكلية والأنشطة الطلابية.</p>", unsafe_allow_html=True)
 
 q = st.text_input(" ", placeholder="اكتب سؤالك هنا...")
 btn = st.button("اضغط هنا للحصول على الإجابة")
@@ -37,18 +37,58 @@ TANWIH = (
     f"<br><a href='{LINK}' target='_blank' style='direction:ltr; display:inline-block;'>{LINK}</a>"
 )
 
-# --- Arabic-aware stopword list (kept small on purpose) ---
-STOPWORDS = {
+# --- دالة توحيد وتطبيع النص العربي لتجاهل الهمزات والألفات والتاء المربوطة والحركات ---
+def normalize_arabic(text: str) -> str:
+    if not text:
+        return ""
+    text = re.sub(r"[إأآا]", "ا", text)
+    text = re.sub(r"ى", "ي", text)
+    text = re.sub(r"ة", "ه", text)
+    text = re.sub(r"[ًٌٍَُِّْ]", "", text)  # إزالة التشكيل والحركات
+    text = re.sub(r"ـ", "", text)          # إزالة التطويل
+    return text.strip().lower()
+
+# --- قائمة الكلمات المتوقفة مع تطبيق توحيد الهمزات عليها ---
+RAW_STOPWORDS = {
     "من", "الى", "إلى", "عن", "على", "في", "هل", "ما", "ماذا", "و", "او", "أو",
     "هو", "هي", "هم", "لا", "نعم", "كيف", "متى", "اين", "أين", "ال", "التي",
     "الذي", "كم", "لماذا", "مع", "هذا", "هذه", "ذلك", "تلك", "كان", "يكون",
 }
+STOPWORDS = {normalize_arabic(w) for w in RAW_STOPWORDS}
 
-# --- Verified facts & Academic Calendar override -----------------------------
+# --- Verified facts, Academic Calendar, and Student Activities -----------------------------
 VERIFIED_FACTS = """
 عميد الكلية: الأستاذ الدكتور عبدالله محمد الدهمش
 
 مفهوم الإرشاد الأكاديمي: خدمة أكاديمية تهدف إلى التعرف على المشكلات التي تعوق قدرة الطالب على التحصيل العلمي والتفاعل مع متطلبات الحياة الجامعية، وتعمل على تقديم المساعدة والدعم عن طريق زيادة وعي الطلبة بمسؤولياتهم.
+
+=== خطة الأنشطة والفعاليات الطلابية المعتمدة (وحدة شؤون الطلبة) ===
+--- أنشطة شهر سبتمبر (الشهر الأول) ---
+- استقبال الطلاب والطلبة الجدد والتهيئة الأكاديمية
+- اليوم الوطني السعودي (فعاليات ومعارض واحتفالات الكلية باليوم الوطني)
+- ورش عمل تعريفية باللوائح والحقوق والواجبات الطلابية
+
+--- أنشطة شهر أكتوبر (الشهر الثاني) ---
+- حملات التوعية الصحية والطبية (اليوم العالمي لسرطان الثدي - الوردي)
+- المعرض الطلابي للابتكار والبحوث الطلابية
+- دوريات الألعاب الرياضية (كرة القدم، الشطرنج، كرة الطاولة)
+- حملات التبرع بالدم بالتعاون مع الجهات الصحية
+
+--- أنشطة شهر نوفمبر (الشهر الثالث) ---
+- اليوم العالمي لطب الأسنان والتمريض (معارض وتوعية ميدانية)
+- زيارات ميدانية علمية ومجتمعية
+- المسابقات الثقافية واللقاءات الحوارية الطلابية
+- ورش تطوير المهارات والمهن الصحية
+
+--- أنشطة شهر ديسمبر (الشهر الرابع) ---
+- المعرض الفني والمهارات الإبداعية والطبخ والصحة
+- حملات التوعية المجتمعية والخدمات التطوعية
+- التكريم والاحتفاء بالطلاب المتفوقين في الأنشطة الطلابية
+
+--- أنشطة الفصول الأخرى والمستمرة ---
+- رحلات ترفيهية وثقافية
+- مسابقات القرآن الكريم والسنة النبوية
+- الأنشطة واللقاءات الدورية لأندية الكلية الطلابية
 
 === التقويم الأكاديمي المعتمد لكليات الرؤية (الفصول الدراسية الثلاثة) ===
 
@@ -99,12 +139,17 @@ VERIFIED_FACTS = """
 - بداية الدراسة للعام الدراسي الجديد 1448-1449 هـ: الأحد 1449/03/20 هـ (الموافق 22/08/2027 م)
 """
 
-HOLIDAY_WORDS = {"اجازه", "اجازات", "عطله", "عطلات", "عطل"}
-EXCUSE_WORDS = {"عذر", "اعذار", "وفاه", "ولاده", "مرضيه", "مرض", "مريض"}
-ACTIVITY_WORDS = {"نشاط", "نشاطات", "انشطه", "أنشطة", "فعاليه", "فعاليات", "خطة", "خطه", "شهر", "أكتوبر", "اكتوبر", "سبتمبر", "نوفمبر", "ديسمبر", "يناير", "فبراير", "مارس", "أبريل", "ابريل", "مايو", "أغسطس", "اغسطس"}
-EXCUSE_SOURCE_HINTS = ("excuse", "عذر")
-CALENDAR_SOURCE_HINTS = ("تقويم", "calendar")
-ACTIVITY_SOURCE_HINTS = ("أنشطة", "الأنشطة", "انشطة", "الأنشطه", "activity")
+HOLIDAY_WORDS = {normalize_arabic(w) for w in ["اجازه", "اجازات", "عطله", "عطلات", "عطل"]}
+EXCUSE_WORDS = {normalize_arabic(w) for w in ["عذر", "اعذار", "وفاه", "ولاده", "مرضيه", "مرض", "مريض"]}
+ACTIVITY_WORDS = {normalize_arabic(w) for w in [
+    "نشاط", "نشاطات", "انشطه", "أنشطة", "فعاليه", "فعاليات", "خطة", "خطه", 
+    "شهر", "أكتوبر", "اكتوبر", "سبتمبر", "نوفمبر", "ديسمبر", "يناير", "فبراير", 
+    "مارس", "أبريل", "ابريل", "مايو", "أغسطس", "اغسطس"
+]}
+
+EXCUSE_SOURCE_HINTS = ("excuse", normalize_arabic("عذر"))
+CALENDAR_SOURCE_HINTS = ("calendar", normalize_arabic("تقويم"))
+ACTIVITY_SOURCE_HINTS = ("activity", normalize_arabic("أنشطة"), normalize_arabic("الأنشطة"), normalize_arabic("انشطة"), normalize_arabic("الأنشطه"))
 
 def unscramble_reversed_arabic_line(line: str) -> str:
     rev = line[::-1]
@@ -118,13 +163,6 @@ def pdf_text_is_reversed(sample_text: str) -> bool:
         return False
     fixed = "\n".join(unscramble_reversed_arabic_line(l) for l in sample_text.split("\n"))
     return any(w in fixed for w in _COMMON_ARABIC_WORDS)
-
-def normalize_arabic(text: str) -> str:
-    text = re.sub(r"[إأآا]", "ا", text)
-    text = re.sub(r"ى", "ي", text)
-    text = re.sub(r"ة", "ه", text)
-    text = re.sub(r"[ًٌٍَُِّْ]", "", text)  # strip tashkeel
-    return text
 
 def read_all_chunks():
     chunks = []
@@ -239,12 +277,14 @@ def score_chunk(question_words, question_bigrams, src, chunk_text, prefer_calend
         if bg in norm_chunk:
             score += 4
 
+    src_norm = normalize_arabic(src)
     src_low = src.lower()
-    if avoid_excuse and any(h in src_low or h in src for h in EXCUSE_SOURCE_HINTS):
+    
+    if avoid_excuse and any(h in src_low or h in src_norm for h in EXCUSE_SOURCE_HINTS):
         score -= 5
-    if prefer_calendar and any(h in src_low or h in src for h in CALENDAR_SOURCE_HINTS):
+    if prefer_calendar and any(h in src_low or h in src_norm for h in CALENDAR_SOURCE_HINTS):
         score += 3
-    if prefer_activity and any(h in src_low or h in src for h in ACTIVITY_SOURCE_HINTS):
+    if prefer_activity and any(h in src_low or h in src_norm for h in ACTIVITY_SOURCE_HINTS):
         score += 8  # إعطاء أولوية مرتفعة لملف الأنشطة عند السؤال عنها
 
     return score
@@ -274,7 +314,8 @@ def build_relevant_corpus(question, chunks, max_chars=8000, top_k=35):
     # إذا كان السؤال عن الأنشطة، نلتقط أجزاء ملف الأنشطة حتى لو لم ينطبق السكور التلقائي عليها بشكل كامل
     if prefer_activity:
         for idx, (sc, src, c) in enumerate(scored):
-            if any(h in src for h in ACTIVITY_SOURCE_HINTS):
+            src_norm = normalize_arabic(src)
+            if any(h in src.lower() or h in src_norm for h in ACTIVITY_SOURCE_HINTS):
                 scored[idx] = (sc + 5, src, c)
 
     scored = [s for s in scored if s[0] > 0]
@@ -306,8 +347,9 @@ if btn and q:
 مهمتك:
 1. استخرج الإجابة بدقة من "النص المرجعي" المرفق فقط.
 2. إذا سُئلت عن أنشطة أو فعاليات شهر معين (مثل أكتوبر، نوفمبر، إلخ)، اذكر جميع الأنشطة والفعاليات الخاصة بهذا الشهر المذكورة في النص المرجعي على شكل نقاط أو أسطر مستقلة.
-3. لا تذكر أي مبالغ مالية أو ميزانيات إطلاقاً.
-4. فقط إذا كان السؤال خروجاً تاماً عن شؤون الطلبة والأنشطة واللوائح (مثل أسئلة عامة أو دول)، رد بـ: "{OUT}".
+3. تجنب الحكم على الكلمات بناءً على وجود الهمزة أو عدمها (مثلاً: أكتبر/اكتوبر، أنشطة/انشطة كلها تعني نفس الشيء).
+4. لا تذكر أي مبالغ مالية أو ميزانيات إطلاقاً.
+5. فقط إذا كان السؤال خروجاً تاماً عن شؤون الطلبة والأنشطة واللوائح (مثل أسئلة عامة أو دول)، رد بـ: "{OUT}".
 
 النص المرجعي:
 {corpus}
