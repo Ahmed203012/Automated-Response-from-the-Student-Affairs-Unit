@@ -1,45 +1,61 @@
 import os, re, streamlit as st
 
+# 1. تهيئة إعدادات الصفحة
 st.set_page_config(page_title="كليات الرؤية", layout="centered")
 
+# 2. إخفاء كافة عناصر منصة Streamlit والأزرار والشريط السفلي عبر CSS
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap');
+
+/* التنسيق العام والاتجاه من اليمين للشمال */
 html, body, [data-testid="stAppViewContainer"] { direction: rtl!important; text-align: right!important; }
 * { font-family: 'Tajawal', sans-serif!important; direction: rtl!important; text-align: right!important; }
 div[data-testid="stImage"] { display:flex!important; justify-content:center!important; }
-div[data-testid="stButton"] > button { background:#c5a880!important; color:white!important; border-radius:14px!important; width:100%!important; font-weight:bold!important; font-size:17px!important; padding:12px!important; }
+
+/* تنسيق زر البحث والأجوبة */
+div[data-testid="stButton"] > button { 
+    background:#c5a880!important; 
+    color:white!important; 
+    border-radius:14px!important; 
+    width:100%!important; 
+    font-weight:bold!important; 
+    font-size:17px!important; 
+    padding:12px!important; 
+}
 .answer-box { background:#eaf7f0; padding:22px; border-radius:12px; border:1px solid #c3e6cb; font-size:18px; line-height:2; }
 .disclaimer-box { background:#fef9e7; padding:16px; border-radius:12px; border:1px solid #f5d78e; margin-top:18px; font-size:14px; }
 
-/* --- إخفاء كل أشرطة وأزرار Streamlit العلوية والسفلية والقوائم --- */
-#MainMenu {visibility: hidden !important; display: none !important;}
-header {visibility: hidden !important; display: none !important;}
-footer {visibility: hidden !important; display: none !important;}
-div[data-testid="stHeader"] {display: none !important;}
-div[data-testid="stToolbar"] {display: none !important;}
-div[data-testid="stDecoration"] {display: none !important;}
-div[data-testid="stStatusWidget"] {display: none !important;}
-div[data-testid="InputInstructions"] { display:none !important; }
-.stAppDeployButton {display:none !important;}
+/* --- إخفاء كل أشرطة وأزرار Streamlit العلويّة والسفليّة وقوائم المطورين --- */
+#MainMenu { visibility: hidden !important; display: none !important; }
+header { visibility: hidden !important; display: none !important; }
+footer { visibility: hidden !important; display: none !important; }
+div[data-testid="stHeader"] { display: none !important; }
+div[data-testid="stToolbar"] { display: none !important; }
+div[data-testid="stDecoration"] { display: none !important; }
+div[data-testid="stStatusWidget"] { display: none !important; }
+div[data-testid="InputInstructions"] { display: none !important; }
+.stAppDeployButton { display: none !important; }
 
-/* --- إخفاء زر Manage App وشريط Profile / Hosted with Streamlit السفلي --- */
-[data-testid="manage-app-button"] {display: none !important;}
-div[class*="stViewerBadge"] {display: none !important;}
-iframe[title="streamlit_app"] {margin-bottom: 0px !important;}
-.viewerBadge_container__1A52n {display: none !important;}
-.viewerBadge_link__1S137 {display: none !important;}
-div[class*="viewerBadge"] {display: none !important;}
+/* --- إخفاء زر Manage app وشريط Profile و Hosted with Streamlit و App Viewers --- */
+[data-testid="manage-app-button"] { display: none !important; }
+div[class*="stViewerBadge"] { display: none !important; }
+iframe[title="streamlit_app"] { margin-bottom: 0px !important; }
+.viewerBadge_container__1A52n { display: none !important; }
+.viewerBadge_link__1S137 { display: none !important; }
+div[class*="viewerBadge"] { display: none !important; }
 
-/* إخفاء الأزرار العائمة وأزرار التطبيقات/الملف الشخصي */
-button[title="View app source"] {display: none !important;}
-.stAppFooter {display: none !important;}
-div[data-testid="stActionButton"] {display: none !important;}
-div[class*="stAppViewer"] {display: none !important;}
-a[href*="streamlit.io"] {display: none !important;}
+/* إخفاء الأزرار العائمة وأزرار المشاريع والبروفايل */
+button[title="View app source"] { display: none !important; }
+.stAppFooter { display: none !important; }
+div[data-testid="stActionButton"] { display: none !important; }
+div[class*="stAppViewer"] { display: none !important; }
+a[href*="streamlit.io"] { display: none !important; }
+button[class*="viewerBadge"] { display: none !important; }
 </style>
 """, unsafe_allow_html=True)
 
+# 3. شعار واجهة التطبيق
 c1, c2, c3 = st.columns([1, 1.2, 1])
 with c2:
     if os.path.exists("logo.png"):
@@ -73,7 +89,7 @@ def normalize_arabic(text: str) -> str:
     text = re.sub(r"ـ", "", text)          # إزالة التطويل
     return text.strip().lower()
 
-# --- قائمة الكلمات المتوقفة مع تطبيق توحيد الهمزات عليها ---
+# --- قائمة الكلمات المتوقفة ---
 RAW_STOPWORDS = {
     "من", "الى", "إلى", "عن", "على", "في", "هل", "ما", "ماذا", "و", "او", "أو",
     "هو", "هي", "هم", "لا", "نعم", "كيف", "متى", "اين", "أين", "ال", "التي",
@@ -81,7 +97,7 @@ RAW_STOPWORDS = {
 }
 STOPWORDS = {normalize_arabic(w) for w in RAW_STOPWORDS}
 
-# --- Verified facts, Academic Calendar, and Student Activities -----------------------------
+# --- الحقائق المعتمدة، التقويم الأكاديمي والأنشطة الطلابية ---
 VERIFIED_FACTS = """
 عميد الكلية: الأستاذ الدكتور عبدالله محمد الدهمش
 
@@ -265,7 +281,7 @@ def read_all_chunks():
                             if len(para) > 5:
                                 chunks.append((f, para))
                 except Exception as fallback_err:
-                    warnings.append(f"{f}: فشل الاحتياطي أيضًا — {fallback_err}")
+                    warnings.append(f"{f}: فشل الاحتياطي أيضاً — {fallback_err}")
         elif low.endswith((".xlsx", ".xls", ".csv")):
             try:
                 import pandas as pd
