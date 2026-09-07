@@ -1,6 +1,7 @@
 import os, re, streamlit as st
 
 st.set_page_config(page_title="كليات الرؤية", layout="centered")
+
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap');
@@ -11,17 +12,31 @@ div[data-testid="stButton"] > button { background:#c5a880!important; color:white
 .answer-box { background:#eaf7f0; padding:22px; border-radius:12px; border:1px solid #c3e6cb; font-size:18px; line-height:2; }
 .disclaimer-box { background:#fef9e7; padding:16px; border-radius:12px; border:1px solid #f5d78e; margin-top:18px; font-size:14px; }
 
-/* --- إخفاء كل العناصر الإضافية والشريط العلوي وشريط Streamlit تماماً --- */
-#MainMenu {visibility: hidden !important;}
-header {visibility: hidden !important;}
-footer {visibility: hidden !important;}
+/* --- إخفاء كل أشرطة وأزرار Streamlit العلوية والسفلية والقوائم --- */
+#MainMenu {visibility: hidden !important; display: none !important;}
+header {visibility: hidden !important; display: none !important;}
+footer {visibility: hidden !important; display: none !important;}
 div[data-testid="stHeader"] {display: none !important;}
 div[data-testid="stToolbar"] {display: none !important;}
 div[data-testid="stDecoration"] {display: none !important;}
 div[data-testid="stStatusWidget"] {display: none !important;}
 div[data-testid="InputInstructions"] { display:none !important; }
 .stAppDeployButton {display:none !important;}
+
+/* --- إخفاء زر Manage App وشريط Profile / Hosted with Streamlit السفلي --- */
 [data-testid="manage-app-button"] {display: none !important;}
+div[class*="stViewerBadge"] {display: none !important;}
+iframe[title="streamlit_app"] {margin-bottom: 0px !important;}
+.viewerBadge_container__1A52n {display: none !important;}
+.viewerBadge_link__1S137 {display: none !important;}
+div[class*="viewerBadge"] {display: none !important;}
+
+/* إخفاء الأزرار العائمة وأزرار التطبيقات/الملف الشخصي */
+button[title="View app source"] {display: none !important;}
+.stAppFooter {display: none !important;}
+div[data-testid="stActionButton"] {display: none !important;}
+div[class*="stAppViewer"] {display: none !important;}
+a[href*="streamlit.io"] {display: none !important;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -345,7 +360,6 @@ def build_relevant_corpus(question, chunks, max_chars=8000, top_k=35):
     return VERIFIED_FACTS + "\n" + "\n".join(selected)
 
 if btn and q:
-    # إظهار دائرية/علامة التحميل أثناء تجهيز واستخراج الإجابة
     with st.spinner("جاري جلب الإجابة..."):
         chunks, extraction_warnings = read_all_chunks()
         corpus = build_relevant_corpus(q, chunks, max_chars=10000, top_k=50)
