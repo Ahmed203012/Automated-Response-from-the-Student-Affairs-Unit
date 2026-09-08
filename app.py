@@ -3,7 +3,7 @@ import os, re, streamlit as st
 # 1. تهيئة إعدادات الصفحة
 st.set_page_config(page_title="كليات الرؤية", layout="centered")
 
-# 2. إخفاء كافة عناصر منصة Streamlit والأزرار والشريط السفلي عبر CSS
+# 2. إخفاء كافة عناصر منصة Streamlit والأزرار والشريط السفلي العائم تماماً عبر CSS
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap');
@@ -26,32 +26,24 @@ div[data-testid="stButton"] > button {
 .answer-box { background:#eaf7f0; padding:22px; border-radius:12px; border:1px solid #c3e6cb; font-size:18px; line-height:2; }
 .disclaimer-box { background:#fef9e7; padding:16px; border-radius:12px; border:1px solid #f5d78e; margin-top:18px; font-size:14px; }
 
-/* --- إخفاء كل أشرطة وأزرار Streamlit العلويّة والسفليّة وقوائم المطورين --- */
-#MainMenu { visibility: hidden !important; display: none !important; }
-header { visibility: hidden !important; display: none !important; }
-footer { visibility: hidden !important; display: none !important; }
-div[data-testid="stHeader"] { display: none !important; }
-div[data-testid="stToolbar"] { display: none !important; }
-div[data-testid="stDecoration"] { display: none !important; }
-div[data-testid="stStatusWidget"] { display: none !important; }
-div[data-testid="InputInstructions"] { display: none !important; }
-.stAppDeployButton { display: none !important; }
+/* --- إخفاء كل أشرطة Streamlit الهيدر والفوتر والفلوانج بار عائم بالكامل --- */
+#MainMenu, header, footer { visibility: hidden !important; display: none !important; }
+div[data-testid="stHeader"], div[data-testid="stToolbar"], div[data-testid="stDecoration"], div[data-testid="stStatusWidget"] { display: none !important; }
+div[data-testid="InputInstructions"], .stAppDeployButton, [data-testid="manage-app-button"] { display: none !important; }
 
-/* --- إخفاء زر Manage app وشريط Profile و Hosted with Streamlit و App Viewers --- */
-[data-testid="manage-app-button"] { display: none !important; }
-div[class*="stViewerBadge"] { display: none !important; }
-iframe[title="streamlit_app"] { margin-bottom: 0px !important; }
-.viewerBadge_container__1A52n { display: none !important; }
-.viewerBadge_link__1S137 { display: none !important; }
-div[class*="viewerBadge"] { display: none !important; }
+/* إخفاء الأزرار العائمة العلوية والسفلية (التاج والمشاركة وعناصر View Source) */
+div[data-testid="stAppToolbar"] { display: none !important; visibility: hidden !important; }
+div[data-testid="stActionButton"] { display: none !important; visibility: hidden !important; }
+div[data-testid="stSidebarCollapseButton"] { display: none !important; }
+.stAppFooter, footer { display: none !important; }
 
-/* إخفاء الأزرار العائمة وأزرار المشاريع والبروفايل */
-button[title="View app source"] { display: none !important; }
-.stAppFooter { display: none !important; }
-div[data-testid="stActionButton"] { display: none !important; }
-div[class*="stAppViewer"] { display: none !important; }
-a[href*="streamlit.io"] { display: none !important; }
-button[class*="viewerBadge"] { display: none !important; }
+/* إخفاء شارة Streamlit والشعارات العائمة للجوال */
+div[class*="stViewerBadge"], .viewerBadge_container__1A52n, .viewerBadge_link__1S137, div[class*="viewerBadge"] { display: none !important; }
+button[title="View app source"], a[href*="streamlit.io"], button[class*="viewerBadge"] { display: none !important; }
+
+/* إلغاء الحواف والهوامش السفلية التي يتركها الفوتر */
+footer { position: fixed; bottom: -100px; }
+.stApp { margin-bottom: 0px !important; padding-bottom: 0px !important; }
 </style>
 """, unsafe_allow_html=True)
 
