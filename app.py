@@ -3,7 +3,7 @@ import os, re, streamlit as st
 # 1. تهيئة إعدادات الصفحة
 st.set_page_config(page_title="كليات الرؤية", layout="centered")
 
-# 2. إخفاء كافة عناصر منصة Streamlit والأزرار والشريط السفلي العائم تماماً عبر CSS
+# 2. إخفاء كافة عناصر منصة Streamlit وتنسيق الواجهة عبر CSS
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap');
@@ -55,12 +55,18 @@ with c2:
     elif os.path.exists("Logo.png"):
         st.image("Logo.png", use_container_width=True)
 
+# العناوين والنصوص الرسمية المطابقة تماماً للصورة
 st.markdown("<h1 style='text-align:center!important; font-size:32px!important;'>كليات الرؤية - Vision Colleges</h1>", unsafe_allow_html=True)
 st.markdown("<h2 style='text-align:center!important; font-size:22px!important;'>الاستفسار الآلي - وحدة شؤون الطلبة</h2>", unsafe_allow_html=True)
 st.markdown("<p style='text-align:center!important; font-size:18px!important;'>مرحبا بكم في كلية الرؤية بالرياض، نرحب باستفساركم حول لوائح وأنظمة الكلية.</p>", unsafe_allow_html=True)
 
+# حقل المدخلات والتفاعل
 q = st.text_input(" ", placeholder="اكتب سؤالك هنا...")
-btn = st.button("اضغط هنا للحصول على الاستفسار")
+
+# جعل الزر محاذيًا لليسار كما في تصميم الصورة
+col1, col2 = st.columns([2, 1])
+with col2:
+    btn = st.button("اضغط هنا للحصول على الاستفسار")
 
 LINK = "https://elearning.vision.edu.sa/course/view.php?id=188"
 OUT = "هذه المعلومة غير متوفرة حاليا في اللوائح المعتمدة لدينا يرجى مراجعة وحدة شؤون الطلبة."
@@ -374,7 +380,6 @@ if btn and q:
 السؤال: {q}
 الإجابة:"""
 
-            # اسم النموذج بدون مسافات
             completion = client.chat.completions.create(
                 model="llama-3.1-8b-instant",
                 messages=[{"role": "user", "content": prompt}],
