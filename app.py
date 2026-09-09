@@ -56,13 +56,10 @@ with c2:
         st.image("Logo.png", use_container_width=True)
 
 st.markdown("<h1 style='text-align:center!important; font-size:32px!important;'>كليات الرؤية - Vision Colleges</h1>", unsafe_allow_html=True)
-# تصغير حجم عنوان الاستفسار الآلي قليلاً بناءً على طلبك
 st.markdown("<h2 style='text-align:center!important; font-size:22px!important;'>الاستفسار الآلي - وحدة شؤون الطلبة</h2>", unsafe_allow_html=True)
-# حذف كلمة "والأنشطة الطلابية"
 st.markdown("<p style='text-align:center!important; font-size:18px!important;'>مرحبا بكم في كلية الرؤية بالرياض، نرحب باستفساركم حول لوائح وأنظمة الكلية.</p>", unsafe_allow_html=True)
 
 q = st.text_input(" ", placeholder="اكتب سؤالك هنا...")
-# تغيير نص الزر
 btn = st.button("اضغط هنا للحصول على الاستفسار")
 
 LINK = "https://elearning.vision.edu.sa/course/view.php?id=188"
@@ -80,11 +77,10 @@ def normalize_arabic(text: str) -> str:
     text = re.sub(r"[إأآا]", "ا", text)
     text = re.sub(r"ى", "ي", text)
     text = re.sub(r"ة", "ه", text)
-    text = re.sub(r"[ًٌٍَُِّْ]", "", text)  # إزالة التشكيل والحركات
-    text = re.sub(r"ـ", "", text)          # إزالة التطويل
+    text = re.sub(r"[ًٌٍَُِّْ]", "", text)
+    text = re.sub(r"ـ", "", text)
     return text.strip().lower()
 
-# --- قائمة الكلمات المتوقفة ---
 RAW_STOPWORDS = {
     "من", "الى", "إلى", "عن", "على", "في", "هل", "ما", "ماذا", "و", "او", "أو",
     "هو", "هي", "هم", "لا", "نعم", "كيف", "متى", "اين", "أين", "ال", "التي",
@@ -92,7 +88,6 @@ RAW_STOPWORDS = {
 }
 STOPWORDS = {normalize_arabic(w) for w in RAW_STOPWORDS}
 
-# --- الحقائق المعتمدة، التقويم الأكاديمي والأنشطة الطلابية (تم إضافة باقي الأشهر لضمان الرد) ---
 VERIFIED_FACTS = """
 عميد الكلية: الأستاذ الدكتور عبدالله محمد الدهمش
 
@@ -185,7 +180,6 @@ def pdf_text_is_reversed(sample_text: str) -> bool:
     fixed = "\n".join(unscramble_reversed_arabic_line(l) for l in sample_text.split("\n"))
     return any(w in fixed for w in _COMMON_ARABIC_WORDS)
 
-# استخدام التخزين المؤقت لزيادة السرعة القصوى وعدم إعادة قراءة الملفات في كل طلب
 @st.cache_data(ttl=3600)
 def read_all_chunks():
     chunks = []
@@ -380,8 +374,9 @@ if btn and q:
 السؤال: {q}
 الإجابة:"""
 
+            # تم تعديل اسم النموذج هنا ليعمل بنجاح وبسرعة فائقة
             completion = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
+                model="llama-3.1-8b-instant",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.0,
             )
