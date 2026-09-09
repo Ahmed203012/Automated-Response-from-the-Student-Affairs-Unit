@@ -3,7 +3,7 @@ import os, re, streamlit as st
 # 1. تهيئة إعدادات الصفحة
 st.set_page_config(page_title="كليات الرؤية", layout="centered")
 
-# 2. إخفاء كافة عناصر منصة Streamlit والأزرار والشريط السفلي عبر CSS - نسخة محسنة
+# 2. إخفاء كافة عناصر منصة Streamlit وتنسيق الواجهة عبر CSS
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap');
@@ -26,41 +26,24 @@ div[data-testid="stButton"] > button {
 .answer-box { background:#eaf7f0; padding:22px; border-radius:12px; border:1px solid #c3e6cb; font-size:18px; line-height:2; }
 .disclaimer-box { background:#fef9e7; padding:16px; border-radius:12px; border:1px solid #f5d78e; margin-top:18px; font-size:14px; }
 
-/* --- إخفاء كل أشرطة وأزرار Streamlit العلويّة والسفليّة وقوائم المطورين - نسخة نهائية 2024-2026 --- */
-#MainMenu { visibility: hidden !important; display: none !important; }
-header { visibility: hidden !important; display: none !important; }
-footer { visibility: hidden !important; display: none !important; }
-div[data-testid="stHeader"] { display: none !important; visibility: hidden !important; height:0 !important;}
-div[data-testid="stToolbar"] { display: none !important; }
-div[data-testid="stDecoration"] { display: none !important; }
-div[data-testid="stStatusWidget"] { display: none !important; }
-div[data-testid="InputInstructions"] { display: none !important; }
-.stAppDeployButton { display: none !important; visibility: hidden !important;}
+/* --- إخفاء كل أشرطة Streamlit الهيدر والفوتر والفلوانج بار عائم بالكامل --- */
+#MainMenu, header, footer { visibility: hidden !important; display: none !important; }
+div[data-testid="stHeader"], div[data-testid="stToolbar"], div[data-testid="stDecoration"], div[data-testid="stStatusWidget"] { display: none !important; }
+div[data-testid="InputInstructions"], .stAppDeployButton, [data-testid="manage-app-button"] { display: none !important; }
 
-/* --- إخفاء زر Manage app وشريط Profile و Hosted with Streamlit و App Viewers --- */
-[data-testid="manage-app-button"] { display: none !important; }
-div[class*="stViewerBadge"] { display: none !important; visibility: hidden !important;}
-iframe[title="streamlit_app"] { margin-bottom: 0px !important; }
-.viewerBadge_container__1A52n { display: none !important; }
-.viewerBadge_link__1S137 { display: none !important; }
-div[class*="viewerBadge"] { display: none !important; }
+/* إخفاء الأزرار العائمة العلوية والسفلية */
+div[data-testid="stAppToolbar"] { display: none !important; visibility: hidden !important; }
+div[data-testid="stActionButton"] { display: none !important; visibility: hidden !important; }
+div[data-testid="stSidebarCollapseButton"] { display: none !important; }
+.stAppFooter, footer { display: none !important; }
 
-/* إخفاءات إضافية جديدة لـ Streamlit Cloud */
-div[data-testid="stBottomBlockContainer"] > div > div > a { display: none !important; }
-button[kind="header"] { display: none !important; }
-div._profileContainer { display: none !important; }
-div[data-testid="stAppViewBlockContainer"] { padding-top: 1rem !important; }
+/* إخفاء شارة Streamlit والشعارات العائمة للجوال */
+div[class*="stViewerBadge"], .viewerBadge_container__1A52n, .viewerBadge_link__1S137, div[class*="viewerBadge"] { display: none !important; }
+button[title="View app source"], a[href*="streamlit.io"], button[class*="viewerBadge"] { display: none !important; }
 
-/* إخفاء الأزرار العائمة وأزرار المشاريع والبروفايل */
-button[title="View app source"] { display: none !important; }
-.stAppFooter { display: none !important; }
-div[data-testid="stActionButton"] { display: none !important; }
-div[class*="stAppViewer"] { display: none !important; }
-a[href*="streamlit.io"] { display: none !important; }
-button[class*="viewerBadge"] { display: none !important; }
-
-/* إخفاء قوي للشارات السفلية اليمنى */
-section[data-testid="stSidebar"] + div div[class*="viewer"] { display:none !important; }
+/* إلغاء الحواف والهوامش السفلية */
+footer { position: fixed; bottom: -100px; }
+.stApp { margin-bottom: 0px !important; padding-bottom: 0px !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -72,13 +55,18 @@ with c2:
     elif os.path.exists("Logo.png"):
         st.image("Logo.png", use_container_width=True)
 
+# العناوين والنصوص المطابقة تماماً لنسخة Render
 st.markdown("<h1 style='text-align:center!important; font-size:32px!important;'>كليات الرؤية - Vision Colleges</h1>", unsafe_allow_html=True)
-st.markdown("<h2 style='text-align:center!important; font-size:26px!important;'>الاستفسار الآلي - وحدة شؤون الطلبة</h2>", unsafe_allow_html=True)
-# تم التغيير الوحيد المطلوب: استفساركم -> استفساراتكم
+st.markdown("<h2 style='text-align:center!important; font-size:22px!important;'>الاستفسار الآلي - وحدة شؤون الطلبة</h2>", unsafe_allow_html=True)
 st.markdown("<p style='text-align:center!important; font-size:18px!important;'>مرحبا بكم في كلية الرؤية بالرياض، نرحب باستفساراتكم حول لوائح وأنظمة الكلية والأنشطة الطلابية.</p>", unsafe_allow_html=True)
 
+# حقل المدخلات والتفاعل
 q = st.text_input(" ", placeholder="اكتب سؤالك هنا...")
-btn = st.button("اضغط هنا للحصول على الإجابة")
+
+# الزر بحسب تصميم نسخة Render
+col1, col2 = st.columns([2, 1])
+with col2:
+    btn = st.button("اضغط هنا للحصول على الإجابة")
 
 LINK = "https://elearning.vision.edu.sa/course/view.php?id=188"
 OUT = "هذه المعلومة غير متوفرة حاليا في اللوائح المعتمدة لدينا يرجى مراجعة وحدة شؤون الطلبة."
@@ -95,11 +83,10 @@ def normalize_arabic(text: str) -> str:
     text = re.sub(r"[إأآا]", "ا", text)
     text = re.sub(r"ى", "ي", text)
     text = re.sub(r"ة", "ه", text)
-    text = re.sub(r"[ًٌٍَُِّْ]", "", text)  # إزالة التشكيل والحركات
-    text = re.sub(r"ـ", "", text)          # إزالة التطويل
+    text = re.sub(r"[ًٌٍَُِّْ]", "", text)
+    text = re.sub(r"ـ", "", text)
     return text.strip().lower()
 
-# --- قائمة الكلمات المتوقفة ---
 RAW_STOPWORDS = {
     "من", "الى", "إلى", "عن", "على", "في", "هل", "ما", "ماذا", "و", "او", "أو",
     "هو", "هي", "هم", "لا", "نعم", "كيف", "متى", "اين", "أين", "ال", "التي",
@@ -107,7 +94,6 @@ RAW_STOPWORDS = {
 }
 STOPWORDS = {normalize_arabic(w) for w in RAW_STOPWORDS}
 
-# --- الحقائق المعتمدة، التقويم الأكاديمي والأنشطة الطلابية ---
 VERIFIED_FACTS = """
 عميد الكلية: الأستاذ الدكتور عبدالله محمد الدهمش
 
@@ -136,57 +122,133 @@ VERIFIED_FACTS = """
 - حملات التوعية المجتمعية والخدمات التطوعية
 - التكريم والاحتفاء بالطلاب المتفوقين في الأنشطة الطلابية
 
---- أنشطة الفصول الأخرى والمستمرة ---
-- رحلات ترفيهية وثقافية
-- مسابقات القرآن الكريم والسنة النبوية
-- الأنشطة واللقاءات الدورية لأندية الكلية الطلابية
+--- أنشطة شهر يناير ---
+- ورش الاستعداد للاختبارات وتحفيز الطلاب
+- لقاءات الإرشاد الأكاديمي للطلبة المتعثرين والمتفوقين
 
-=== التقويم الأكاديمي المعتمد لكليات الرؤية (الفصول الدراسية الثلاثة) ===
+--- أنشطة شهر فبراير ---
+- فعاليات يوم التأسيس السعودي والمعارض التراثية والثقافية بالكلية
+- الأنشطة الرياضية والبطولات التنافسية الداخلية
 
+--- أنشطة شهر مارس ---
+- فعاليات اليوم العالمي لطب الأسنان واليوم العالمي للصحة
+- الحملات التوعوية والمبادرات التطوعية الخارجية والخدمات المجتمعية
+- الدورات والورش التدريبية لتعزيز المهارات الطلابية
+
+--- أنشطة شهر أبريل ---
+- يوم البحث العلمي الطلابي ومعرض المبتكرات
+- المسابقات الثقافية والدينية واللقاءات الطلابية المفتوحة
+- التوعية بالصحة النفسية وبناء القدرات الشخصية
+
+--- أنشطة شهر مايو ---
+- المعارض الفنية والختامية للأنشطة الطلابية
+- حفل تكريم الأندية الطلابية والمتطوعين والطلاب المتميزين
+
+=== التقويم الأكاديمي المعتمد لكليات الرؤية ===
 --- الفصل الدراسي الأول ---
 - بداية التهيئة والتسجيل للفصل الدراسي الأول: الأحد 1448/03/03 هـ (الموافق 16/08/2026 م)
+- بداية الدراسة للفصل الدراسي الأول: الأحد 1448/03/10 هـ (الموافق 23/08/2026 م)
+- بداية فترة الحذف والإضافة للفصل الدراسي الأول: الأحد 1448/03/10 هـ (الموافق 23/08/2026 م)
+- إجازة اليوم الوطني: الأربعاء والخميس 1448/04/12 - 1448/04/13 هـ (الموافق 23/09/2026 - 24/09/2026 م)
+- بداية اختبارات منتصف الفصل الدراسي الأول: الخميس 1448/04/27 هـ (الموافق 08/10/2026 م)
+- بداية الاختبارات النهائية للفصل الدراسي الأول: الأحد 1448/07/11 هـ (الموافق 20/12/2026 م)
+
+--- الفصل الدراسي الثاني ---
+- بداية التهيئة والتسجيل للفصل الدراسي الثاني: الأحد 1448/08/02 هـ (الموافق 10/01/2027 م)
+- بداية الدراسة للفصل الدراسي الثاني: الأحد 1448/08/09 هـ (الموافق 17/01/2027 م)
+- إجازة يوم التأسيس: الأحد والاثنين 1448/09/14 - 1448/09/15 هـ (الموافق 21/02/2027 - 22/02/2027 م)
+- بداية إجازة عيد الفطر: الثلاثاء 1448/09/16 هـ (الموافق 23/02/2027 م)
+- بداية الاختبارات النهائية للفصل الدراسي الثاني: الأحد 1449/01/01 هـ (الموافق 06/06/2027 م)
 """
 
-EXCUSE_SOURCE_HINTS = ["عذر", "اعذار", "غياب"]
-CALENDAR_SOURCE_HINTS = ["تقويم", "اجازه", "عطله", "جدول"]
-ACTIVITY_SOURCE_HINTS = ["نشاط", "فعاليه", "انشطه", "فعاليات", "شهر", "سبتمبر", "اكتوبر", "نوفمبر", "ديسمبر"]
-HOLIDAY_WORDS = {"اجازه", "اجازات", "عطله", "عطل", "عطلة"}
-EXCUSE_WORDS = {"عذر", "اعذار", "غياب", "تبرير"}
-ACTIVITY_WORDS = {"نشاط", "انشطه", "فعاليه", "فعاليات", "سبتمبر", "اكتوبر", "نوفمبر", "ديسمبر", "يناير", "فبراير", "مارس", "ابريل", "مايو", "يونيو", "يوليو", "اغسطس"}
+HOLIDAY_WORDS = {normalize_arabic(w) for w in ["اجازه", "اجازات", "عطله", "عطلات", "عطل"]}
+EXCUSE_WORDS = {normalize_arabic(w) for w in ["عذر", "اعذار", "وفاه", "ولاده", "مرضيه", "مرض", "مريض"]}
+ACTIVITY_WORDS = {normalize_arabic(w) for w in [
+    "نشاط", "نشاطات", "انشطه", "أنشطة", "فعاليه", "فعاليات", "خطة", "خطه", 
+    "شهر", "أكتوبر", "اكتوبر", "سبتمبر", "نوفمبر", "ديسمبر", "يناير", "فبراير", 
+    "مارس", "أبريل", "ابريل", "مايو", "أغسطس", "اغسطس"
+]}
 
+EXCUSE_SOURCE_HINTS = ("excuse", normalize_arabic("عذر"))
+CALENDAR_SOURCE_HINTS = ("calendar", normalize_arabic("تقويم"))
+ACTIVITY_SOURCE_HINTS = ("activity", normalize_arabic("أنشطة"), normalize_arabic("الأنشطة"), normalize_arabic("انشطة"), normalize_arabic("الأنشطه"))
 
-# --- تحسين السرعة: تخزين قراءة الملفات في الذاكرة مرة واحدة فقط ---
-@st.cache_data(show_spinner=False)
-def read_all_chunks_cached():
-    chunks, warnings = [], []
-    files = [f for f in os.listdir(".") if os.path.isfile(f)]
-    for f in files:
+def unscramble_reversed_arabic_line(line: str) -> str:
+    rev = line[::-1]
+    rev = re.sub(r"[A-Za-z0-9]+", lambda m: m.group()[::-1], rev)
+    return rev
+
+_COMMON_ARABIC_WORDS = ("الكلية", "الطلاب", "برنامج", "الرياض", "الأنشطة")
+
+def pdf_text_is_reversed(sample_text: str) -> bool:
+    if any(w in sample_text for w in _COMMON_ARABIC_WORDS):
+        return False
+    fixed = "\n".join(unscramble_reversed_arabic_line(l) for l in sample_text.split("\n"))
+    return any(w in fixed for w in _COMMON_ARABIC_WORDS)
+
+@st.cache_data(ttl=3600)
+def read_all_chunks():
+    chunks = []
+    warnings = []
+    for f in sorted(os.listdir(".")):
         low = f.lower()
-        if low.endswith(".pdf"):
+        if low.endswith(".txt"):
+            for enc in ["utf-8", "utf-8-sig", "windows-1256"]:
+                try:
+                    with open(f, "r", encoding=enc, errors="ignore") as file:
+                        t = file.read()
+                        if len(t.strip()) > 20:
+                            for para in re.split(r"\n\s*\n", t):
+                                para = para.strip()
+                                if len(para) > 5:
+                                    chunks.append((f, para))
+                            break
+                except Exception:
+                    pass
+        elif low.endswith(".pdf"):
             try:
                 import pdfplumber
                 with pdfplumber.open(f) as pdf:
+                    sample = ""
+                    for p in pdf.pages[:2]:
+                        sample += (p.extract_text() or "")
+                    is_reversed = pdf_text_is_reversed(sample)
+
                     for page_num, page in enumerate(pdf.pages, start=1):
                         try:
                             text = page.extract_text() or ""
-                            heading = None
-                            words = getattr(page, "objects", {}).get("text", [])
-                            if words:
-                                sizes = [w.get("size", 0) for w in words]
-                                if sizes:
-                                    max_size = max(sizes)
-                                    big = [w for w in words if w.get("size", 0) >= max_size - 0.5]
-                                    if big:
-                                        heading = " ".join(w.get("text","") for w in big).strip()
+                            if is_reversed:
+                                text = "\n".join(
+                                    unscramble_reversed_arabic_line(l) for l in text.split("\n")
+                                )
+                            flat_text = re.sub(r"\s+", " ", text)
+                            heading_match = re.search(r"أنشطة\s+شهر\s+\S+(?:\s+\S+)?", flat_text)
+                            heading = heading_match.group().strip() if heading_match else ""
+
+                            for table in (page.extract_tables() or []):
+                                for row in table:
+                                    cells = []
+                                    for c in row:
+                                        if not c:
+                                            continue
+                                        c = str(c).strip()
+                                        if is_reversed:
+                                            c = "\n".join(
+                                                unscramble_reversed_arabic_line(l)
+                                                for l in c.split("\n")
+                                            )
+                                        if c:
+                                            cells.append(c)
+                                    if cells:
+                                        row_text = " | ".join(cells)
+                                        if heading:
+                                            row_text = f"{heading} — {row_text}"
+                                        chunks.append((f, row_text))
+
                             for para in re.split(r"\n\s*\n", text):
                                 para = para.strip()
-                                if len(para) <= 5:
-                                    continue
-                                row_text = para
-                                if heading and len(heading) > 3 and heading not in para and len(heading.split()) <= 10:
-                                    if len(para) < 200:
-                                        row_text = f"{heading} — {para}"
-                                chunks.append((f, row_text))
+                                if len(para) > 5:
+                                    chunks.append((f, para))
                         except Exception as page_err:
                             warnings.append(f"{f} (صفحة {page_num}): {page_err}")
             except Exception as file_err:
@@ -297,20 +359,32 @@ def build_relevant_corpus(question, chunks, max_chars=6000, top_k=25):
 
 if btn and q:
     with st.spinner("جاري جلب الإجابة..."):
-        chunks, extraction_warnings = read_all_chunks_cached()
+        chunks, extraction_warnings = read_all_chunks()
         corpus = build_relevant_corpus(q, chunks, max_chars=6000, top_k=25)
 
         ans = ""
         try:
             from groq import Groq
-            client = Groq(api_key=st.secrets["GROQ_API_KEY"])
-            prompt = f"""أنت مساعد شؤون الطلبة في كليات الرؤية بالرياض.
+            
+            # جلب المفتاح سواء تم وضعه في os.environ (Render) أو st.secrets (Streamlit Cloud)
+            api_key = os.environ.get("GROQ_API_KEY")
+            if not api_key:
+                try:
+                    api_key = st.secrets["GROQ_API_KEY"]
+                except Exception:
+                    api_key = None
+
+            if not api_key:
+                ans = "خطأ: لم يتم العثور على مفتاح GROQ_API_KEY. يُرجى إضافته في Environment Variables في Render."
+            else:
+                client = Groq(api_key=api_key)
+                prompt = f"""أنت مساعد شؤون الطلبة في كليات الرؤية بالرياض.
 مهمتك:
 1. استخرج الإجابة بدقة من "النص المرجعي" المرفق فقط.
-2. إذا سُئلت عن أنشطة أو فعاليات شهر معين (مثل أكتوبر، نوفمبر، إلخ)، اذكر جميع الأنشطة والفعاليات الخاصة بهذا الشهر المذكورة في النص المرجعي على شكل نقاط أو أسطر مستقلة.
-3. تجنب الحكم على الكلمات بناءً على وجود الهمزة أو عدمها (مثلاً: أكتبر/اكتوبر، أنشطة/انشطة كلها تعني نفس الشيء).
-4. لا تذكر أي مبالغ مالية أو ميزانيات إطلاقاً.
-5. فقط إذا كان السؤال خروجاً تاماً عن شؤون الطلبة والأنشطة واللوائح (مثل أسئلة عامة أو دول)، رد بـ: "{OUT}".
+2. إذا سُئلت عن أنشطة أو فعاليات شهر معين، اذكر الأنشطة المذكورة في النص المرجعي على شكل نقاط بوضوح.
+3. تجنب الحكم على الكلمات بناءً على وجود الهمزة أو عدمها (أبريل/ابريل، مارس، أكتوبر كلها مقبولة بنفس المعنى).
+4. لا تذكر أي مبالغ مالية أو ميزانيات.
+5. إذا لم توجد أي معلومة إطلاقاً تخص السؤال، رد بـ: "{OUT}".
 
 النص المرجعي:
 {corpus}
@@ -318,12 +392,12 @@ if btn and q:
 السؤال: {q}
 الإجابة:"""
 
-            completion = client.chat.completions.create(
-                model="llama-3.1-8b-instant",
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.0,
-            )
-            ans = completion.choices[0].message.content.strip()
+                completion = client.chat.completions.create(
+                    model="llama-3.1-8b-instant",
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.0,
+                )
+                ans = completion.choices[0].message.content.strip()
         except Exception as e:
             ans = f"خطأ في الاتصال بـ Groq: {e}"
 
@@ -332,8 +406,3 @@ if btn and q:
 
     st.markdown(f"<div class='answer-box' dir='rtl'>{ans}</div>", unsafe_allow_html=True)
     st.markdown(f"<div class='disclaimer-box' dir='rtl'>{TANWIH}</div>", unsafe_allow_html=True)
-
-    if extraction_warnings:
-        with st.expander("تفاصيل تقنية (لو احتجت تبلغني بمشكلة)"):
-            for w in extraction_warnings:
-                st.write(w)
