@@ -55,18 +55,18 @@ with c2:
     elif os.path.exists("Logo.png"):
         st.image("Logo.png", use_container_width=True)
 
-# العناوين والنصوص المطابقة تماماً لنسخة Render
+# العناوين والنصوص المطابقة تماماً لنسخة Render (مع حذف "والأنشطة الطلابية")
 st.markdown("<h1 style='text-align:center!important; font-size:32px!important;'>كليات الرؤية - Vision Colleges</h1>", unsafe_allow_html=True)
 st.markdown("<h2 style='text-align:center!important; font-size:22px!important;'>الاستفسار الآلي - وحدة شؤون الطلبة</h2>", unsafe_allow_html=True)
-st.markdown("<p style='text-align:center!important; font-size:18px!important;'>مرحبا بكم في كلية الرؤية بالرياض، نرحب باستفساراتكم حول لوائح وأنظمة الكلية والأنشطة الطلابية.</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align:center!important; font-size:18px!important;'>مرحبا بكم في كلية الرؤية بالرياض، نرحب باستفساراتكم حول لوائح وأنظمة الكلية.</p>", unsafe_allow_html=True)
 
 # حقل المدخلات والتفاعل
 q = st.text_input(" ", placeholder="اكتب سؤالك هنا...")
 
-# الزر بحسب تصميم نسخة Render
-col1, col2 = st.columns([2, 1])
-with col2:
-    btn = st.button("اضغط هنا للحصول على الإجابة")
+# الزر بحسب تصميم نسخة Render (تم جعله في الناحية اليمنى وتعديل النص)
+col1, col2 = st.columns([1, 2])
+with col1:
+    btn = st.button("للرد على استفسارك اضغط هنا")
 
 LINK = "https://elearning.vision.edu.sa/course/view.php?id=188"
 OUT = "هذه المعلومة غير متوفرة حاليا في اللوائح المعتمدة لدينا يرجى مراجعة وحدة شؤون الطلبة."
@@ -393,7 +393,7 @@ if btn and q:
 الإجابة:"""
 
                 completion = client.chat.completions.create(
-                    model="llama-3.1-8b-instant",
+                    model="llama-3.3-70b-versatile",
                     messages=[{"role": "user", "content": prompt}],
                     temperature=0.0,
                 )
