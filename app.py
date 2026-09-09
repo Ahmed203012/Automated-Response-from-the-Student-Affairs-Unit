@@ -3,7 +3,7 @@ import os, re, streamlit as st
 # 1. تهيئة إعدادات الصفحة
 st.set_page_config(page_title="كليات الرؤية", layout="centered")
 
-# 2. إخفاء كافة عناصر منصة Streamlit وتنسيق الواجهة عبر CSS
+# 2. إخفاء كافة عناصر منصة Streamlit والأزرار والشريط السفلي عبر CSS
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap');
@@ -26,24 +26,32 @@ div[data-testid="stButton"] > button {
 .answer-box { background:#eaf7f0; padding:22px; border-radius:12px; border:1px solid #c3e6cb; font-size:18px; line-height:2; }
 .disclaimer-box { background:#fef9e7; padding:16px; border-radius:12px; border:1px solid #f5d78e; margin-top:18px; font-size:14px; }
 
-/* --- إخفاء كل أشرطة Streamlit الهيدر والفوتر والفلوانج بار عائم بالكامل --- */
-#MainMenu, header, footer { visibility: hidden !important; display: none !important; }
-div[data-testid="stHeader"], div[data-testid="stToolbar"], div[data-testid="stDecoration"], div[data-testid="stStatusWidget"] { display: none !important; }
-div[data-testid="InputInstructions"], .stAppDeployButton, [data-testid="manage-app-button"] { display: none !important; }
+/* --- إخفاء كل أشرطة وأزرار Streamlit العلويّة والسفليّة وقوائم المطورين --- */
+#MainMenu { visibility: hidden !important; display: none !important; }
+header { visibility: hidden !important; display: none !important; }
+footer { visibility: hidden !important; display: none !important; }
+div[data-testid="stHeader"] { display: none !important; }
+div[data-testid="stToolbar"] { display: none !important; }
+div[data-testid="stDecoration"] { display: none !important; }
+div[data-testid="stStatusWidget"] { display: none !important; }
+div[data-testid="InputInstructions"] { display: none !important; }
+.stAppDeployButton { display: none !important; }
 
-/* إخفاء الأزرار العائمة العلوية والسفلية */
-div[data-testid="stAppToolbar"] { display: none !important; visibility: hidden !important; }
-div[data-testid="stActionButton"] { display: none !important; visibility: hidden !important; }
-div[data-testid="stSidebarCollapseButton"] { display: none !important; }
-.stAppFooter, footer { display: none !important; }
+/* --- إخفاء زر Manage app وشريط Profile و Hosted with Streamlit و App Viewers --- */
+[data-testid="manage-app-button"] { display: none !important; }
+div[class*="stViewerBadge"] { display: none !important; }
+iframe[title="streamlit_app"] { margin-bottom: 0px !important; }
+.viewerBadge_container__1A52n { display: none !important; }
+.viewerBadge_link__1S137 { display: none !important; }
+div[class*="viewerBadge"] { display: none !important; }
 
-/* إخفاء شارة Streamlit والشعارات العائمة للجوال */
-div[class*="stViewerBadge"], .viewerBadge_container__1A52n, .viewerBadge_link__1S137, div[class*="viewerBadge"] { display: none !important; }
-button[title="View app source"], a[href*="streamlit.io"], button[class*="viewerBadge"] { display: none !important; }
-
-/* إلغاء الحواف والهوامش السفلية */
-footer { position: fixed; bottom: -100px; }
-.stApp { margin-bottom: 0px !important; padding-bottom: 0px !important; }
+/* إخفاء الأزرار العائمة وأزرار المشاريع والبروفايل */
+button[title="View app source"] { display: none !important; }
+.stAppFooter { display: none !important; }
+div[data-testid="stActionButton"] { display: none !important; }
+div[class*="stAppViewer"] { display: none !important; }
+a[href*="streamlit.io"] { display: none !important; }
+button[class*="viewerBadge"] { display: none !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -55,18 +63,12 @@ with c2:
     elif os.path.exists("Logo.png"):
         st.image("Logo.png", use_container_width=True)
 
-# العناوين والنصوص الرسمية المطابقة تماماً للصورة
 st.markdown("<h1 style='text-align:center!important; font-size:32px!important;'>كليات الرؤية - Vision Colleges</h1>", unsafe_allow_html=True)
-st.markdown("<h2 style='text-align:center!important; font-size:22px!important;'>الاستفسار الآلي - وحدة شؤون الطلبة</h2>", unsafe_allow_html=True)
-st.markdown("<p style='text-align:center!important; font-size:18px!important;'>مرحبا بكم في كلية الرؤية بالرياض، نرحب باستفساركم حول لوائح وأنظمة الكلية.</p>", unsafe_allow_html=True)
+st.markdown("<h2 style='text-align:center!important; font-size:26px!important;'>الاستفسار الآلي - وحدة شؤون الطلبة</h2>", unsafe_allow_html=True)
+st.markdown("<p style='text-align:center!important; font-size:18px!important;'>مرحبا بكم في كلية الرؤية بالرياض، نرحب باستفساركم حول لوائح وأنظمة الكلية والأنشطة الطلابية.</p>", unsafe_allow_html=True)
 
-# حقل المدخلات والتفاعل
 q = st.text_input(" ", placeholder="اكتب سؤالك هنا...")
-
-# جعل الزر محاذيًا لليسار كما في تصميم الصورة
-col1, col2 = st.columns([2, 1])
-with col2:
-    btn = st.button("اضغط هنا للحصول على الاستفسار")
+btn = st.button("اضغط هنا للحصول على الإجابة")
 
 LINK = "https://elearning.vision.edu.sa/course/view.php?id=188"
 OUT = "هذه المعلومة غير متوفرة حاليا في اللوائح المعتمدة لدينا يرجى مراجعة وحدة شؤون الطلبة."
@@ -83,10 +85,11 @@ def normalize_arabic(text: str) -> str:
     text = re.sub(r"[إأآا]", "ا", text)
     text = re.sub(r"ى", "ي", text)
     text = re.sub(r"ة", "ه", text)
-    text = re.sub(r"[ًٌٍَُِّْ]", "", text)
-    text = re.sub(r"ـ", "", text)
+    text = re.sub(r"[ًٌٍَُِّْ]", "", text)  # إزالة التشكيل والحركات
+    text = re.sub(r"ـ", "", text)          # إزالة التطويل
     return text.strip().lower()
 
+# --- قائمة الكلمات المتوقفة ---
 RAW_STOPWORDS = {
     "من", "الى", "إلى", "عن", "على", "في", "هل", "ما", "ماذا", "و", "او", "أو",
     "هو", "هي", "هم", "لا", "نعم", "كيف", "متى", "اين", "أين", "ال", "التي",
@@ -94,6 +97,7 @@ RAW_STOPWORDS = {
 }
 STOPWORDS = {normalize_arabic(w) for w in RAW_STOPWORDS}
 
+# --- الحقائق المعتمدة، التقويم الأكاديمي والأنشطة الطلابية ---
 VERIFIED_FACTS = """
 عميد الكلية: الأستاذ الدكتور عبدالله محمد الدهمش
 
@@ -122,43 +126,58 @@ VERIFIED_FACTS = """
 - حملات التوعية المجتمعية والخدمات التطوعية
 - التكريم والاحتفاء بالطلاب المتفوقين في الأنشطة الطلابية
 
---- أنشطة شهر يناير ---
-- ورش الاستعداد للاختبارات وتحفيز الطلاب
-- لقاءات الإرشاد الأكاديمي للطلبة المتعثرين والمتفوقين
+--- أنشطة الفصول الأخرى والمستمرة ---
+- رحلات ترفيهية وثقافية
+- مسابقات القرآن الكريم والسنة النبوية
+- الأنشطة واللقاءات الدورية لأندية الكلية الطلابية
 
---- أنشطة شهر فبراير ---
-- فعاليات يوم التأسيس السعودي والمعارض التراثية والثقافية بالكلية
-- الأنشطة الرياضية والبطولات التنافسية الداخلية
+=== التقويم الأكاديمي المعتمد لكليات الرؤية (الفصول الدراسية الثلاثة) ===
 
---- أنشطة شهر مارس ---
-- فعاليات اليوم العالمي لطب الأسنان واليوم العالمي للصحة
-- الحملات التوعوية والمبادرات التطوعية الخارجية والخدمات المجتمعية
-- الدورات والورش التدريبية لتعزيز المهارات الطلابية
-
---- أنشطة شهر أبريل ---
-- يوم البحث العلمي الطلابي ومعرض المبتكرات
-- المسابقات الثقافية والدينية واللقاءات الطلابية المفتوحة
-- التوعية بالصحة النفسية وبناء القدرات الشخصية
-
---- أنشطة شهر مايو ---
-- المعارض الفنية والختامية للأنشطة الطلابية
-- حفل تكريم الأندية الطلابية والمتطوعين والطلاب المتميزين
-
-=== التقويم الأكاديمي المعتمد لكليات الرؤية ===
 --- الفصل الدراسي الأول ---
 - بداية التهيئة والتسجيل للفصل الدراسي الأول: الأحد 1448/03/03 هـ (الموافق 16/08/2026 م)
 - بداية الدراسة للفصل الدراسي الأول: الأحد 1448/03/10 هـ (الموافق 23/08/2026 م)
 - بداية فترة الحذف والإضافة للفصل الدراسي الأول: الأحد 1448/03/10 هـ (الموافق 23/08/2026 م)
+- آخر موعد لتأجيل الفصل الدراسي الأول: الخميس 1448/03/21 هـ (الموافق 03/09/2026 م)
+- نهاية فترة الحذف والإضافة للفصل الدراسي الأول: الخميس 1448/03/21 هـ (الموافق 03/09/2026 م)
 - إجازة اليوم الوطني: الأربعاء والخميس 1448/04/12 - 1448/04/13 هـ (الموافق 23/09/2026 - 24/09/2026 م)
 - بداية اختبارات منتصف الفصل الدراسي الأول: الخميس 1448/04/27 هـ (الموافق 08/10/2026 م)
+- نهاية اختبارات منتصف الفصل الدراسي الأول: الأحد 1448/05/07 هـ (الموافق 18/10/2026 م)
+- إجازة نهاية أسبوع مطولة: الأربعاء والخميس 1448/06/15 - 1448/06/16 هـ (الموافق 25/11/2026 - 26/11/2026 م)
+- آخر موعد للاعتذار عن الفصل الدراسي الأول أو الانسحاب عن دراسة مقرر: الخميس 1448/06/23 هـ (الموافق 03/12/2026 م)
 - بداية الاختبارات النهائية للفصل الدراسي الأول: الأحد 1448/07/11 هـ (الموافق 20/12/2026 م)
+- نهاية الاختبارات النهائية للفصل الدراسي الأول: السبت 1448/07/24 هـ (الموافق 02/01/2027 م)
+- بداية إجازة منتصف العام الدراسي: الأحد 1448/07/25 هـ (الموافق 03/01/2027 م)
 
 --- الفصل الدراسي الثاني ---
 - بداية التهيئة والتسجيل للفصل الدراسي الثاني: الأحد 1448/08/02 هـ (الموافق 10/01/2027 م)
 - بداية الدراسة للفصل الدراسي الثاني: الأحد 1448/08/09 هـ (الموافق 17/01/2027 م)
+- بداية فترة الحذف والإضافة للفصل الدراسي الثاني: الأحد 1448/08/09 هـ (الموافق 17/01/2027 م)
+- آخر موعد لتأجيل الفصل الدراسي الثاني: الخميس 1448/08/20 هـ (الموافق 28/01/2027 م)
+- نهاية فترة الحذف والإضافة للفصل الدراسي الثاني: الخميس 1448/08/20 هـ (الموافق 28/01/2027 م)
 - إجازة يوم التأسيس: الأحد والاثنين 1448/09/14 - 1448/09/15 هـ (الموافق 21/02/2027 - 22/02/2027 م)
 - بداية إجازة عيد الفطر: الثلاثاء 1448/09/16 هـ (الموافق 23/02/2027 م)
+- بداية الدراسة بعد إجازة عيد الفطر: الأحد 1448/10/06 هـ (الموافق 14/03/2027 م)
+- بداية اختبارات منتصف الفصل الدراسي الثاني: الخميس 1448/10/17 هـ (الموافق 25/03/2027 م)
+- نهاية اختبارات منتصف الفصل الدراسي الثاني: الأحد 1448/10/27 هـ (الموافق 04/04/2027 م)
+- آخر موعد للاعتذار عن الفصل الدراسي الثاني أو الانسحاب عن مقرر: الخميس 1448/12/07 هـ (الموافق 13/05/2027 م)
+- بداية إجازة عيد الأضحى: نهاية دوام يوم الخميس 1448/12/07 هـ (الموافق 13/05/2027 م)
+- بداية الدراسة بعد إجازة عيد الأضحى: الأحد 1448/12/17 هـ (الموافق 23/05/2027 م)
 - بداية الاختبارات النهائية للفصل الدراسي الثاني: الأحد 1449/01/01 هـ (الموافق 06/06/2027 م)
+- نهاية الاختبارات النهائية للفصل الدراسي الثاني: السبت 1449/01/14 هـ (الموافق 19/06/2027 م)
+- بداية إجازة نهاية العام الدراسي: الأحد 1449/01/15 هـ (الموافق 20/06/2027 م)
+
+--- الفصل الدراسي الصيفي ---
+- بداية التهيئة والتسجيل للفصل الصيفي: الأحد 1449/01/15 هـ (الموافق 20/06/2027 م)
+- بداية الدراسة للفصل الصيفي: الأحد 1449/01/22 هـ (الموافق 27/06/2027 م)
+- بداية فترة الحذف والإضافة للفصل الصيفي: الأحد 1449/01/22 هـ (الموافق 27/06/2027 م)
+- نهاية فترة الحذف والإضافة للفصل الصيفي: الخميس 1449/01/26 هـ (الموافق 01/07/2027 م)
+- بداية اختبارات منتصف الفصل الصيفي: الأحد 1449/02/14 هـ (الموافق 18/07/2027 م)
+- نهاية اختبارات منتصف الفصل الصيفي: السبت 1449/02/20 هـ (الموافق 24/07/2027 م)
+- آخر موعد للاعتذار عن الفصل الصيفي أو الانسحاب عن مقرر: الأحد 1449/02/21 هـ (الموافق 25/07/2027 م)
+- بداية الاختبارات النهائية للفصل الصيفي: الأحد 1449/03/06 هـ (الموافق 08/08/2027 م)
+- نهاية الاختبارات النهائية للفصل الصيفي: السبت 1449/03/12 هـ (الموافق 14/08/2027 م)
+- بداية إجازة نهاية العام الدراسي: الأحد 1449/03/13 هـ (الموافق 15/08/2027 م)
+- بداية الدراسة للعام الدراسي الجديد 1448-1449 هـ: الأحد 1449/03/20 هـ (الموافق 22/08/2027 م)
 """
 
 HOLIDAY_WORDS = {normalize_arabic(w) for w in ["اجازه", "اجازات", "عطله", "عطلات", "عطل"]}
@@ -186,7 +205,6 @@ def pdf_text_is_reversed(sample_text: str) -> bool:
     fixed = "\n".join(unscramble_reversed_arabic_line(l) for l in sample_text.split("\n"))
     return any(w in fixed for w in _COMMON_ARABIC_WORDS)
 
-@st.cache_data(ttl=3600)
 def read_all_chunks():
     chunks = []
     warnings = []
@@ -312,7 +330,7 @@ def score_chunk(question_words, question_bigrams, src, chunk_text, prefer_calend
 
     return score
 
-def build_relevant_corpus(question, chunks, max_chars=6000, top_k=25):
+def build_relevant_corpus(question, chunks, max_chars=8000, top_k=35):
     norm_q = normalize_arabic(question)
     q_words = [w for w in re.split(r"\s+", norm_q) if w and w not in STOPWORDS and len(w) > 1]
     q_bigrams = [f"{a} {b}" for a, b in zip(q_words, q_words[1:])]
@@ -360,7 +378,7 @@ def build_relevant_corpus(question, chunks, max_chars=6000, top_k=25):
 if btn and q:
     with st.spinner("جاري جلب الإجابة..."):
         chunks, extraction_warnings = read_all_chunks()
-        corpus = build_relevant_corpus(q, chunks, max_chars=6000, top_k=25)
+        corpus = build_relevant_corpus(q, chunks, max_chars=10000, top_k=50)
 
         ans = ""
         try:
@@ -369,10 +387,10 @@ if btn and q:
             prompt = f"""أنت مساعد شؤون الطلبة في كليات الرؤية بالرياض.
 مهمتك:
 1. استخرج الإجابة بدقة من "النص المرجعي" المرفق فقط.
-2. إذا سُئلت عن أنشطة أو فعاليات شهر معين، اذكر الأنشطة المذكورة في النص المرجعي على شكل نقاط بوضوح.
-3. تجنب الحكم على الكلمات بناءً على وجود الهمزة أو عدمها (أبريل/ابريل، مارس، أكتوبر كلها مقبولة بنفس المعنى).
-4. لا تذكر أي مبالغ مالية أو ميزانيات.
-5. إذا لم توجد أي معلومة إطلاقاً تخص السؤال، رد بـ: "{OUT}".
+2. إذا سُئلت عن أنشطة أو فعاليات شهر معين (مثل أكتوبر، نوفمبر، إلخ)، اذكر جميع الأنشطة والفعاليات الخاصة بهذا الشهر المذكورة في النص المرجعي على شكل نقاط أو أسطر مستقلة.
+3. تجنب الحكم على الكلمات بناءً على وجود الهمزة أو عدمها (مثلاً: أكتبر/اكتوبر، أنشطة/انشطة كلها تعني نفس الشيء).
+4. لا تذكر أي مبالغ مالية أو ميزانيات إطلاقاً.
+5. فقط إذا كان السؤال خروجاً تاماً عن شؤون الطلبة والأنشطة واللوائح (مثل أسئلة عامة أو دول)، رد بـ: "{OUT}".
 
 النص المرجعي:
 {corpus}
@@ -381,7 +399,7 @@ if btn and q:
 الإجابة:"""
 
             completion = client.chat.completions.create(
-                model="llama-3.1-8b-instant",
+                model="openai/gpt-oss-20b",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.0,
             )
@@ -394,3 +412,8 @@ if btn and q:
 
     st.markdown(f"<div class='answer-box' dir='rtl'>{ans}</div>", unsafe_allow_html=True)
     st.markdown(f"<div class='disclaimer-box' dir='rtl'>{TANWIH}</div>", unsafe_allow_html=True)
+
+    if extraction_warnings:
+        with st.expander("تفاصيل تقنية (لو احتجت تبلغني بمشكلة)"):
+            for w in extraction_warnings:
+                st.write(w)
