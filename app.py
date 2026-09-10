@@ -26,7 +26,7 @@ div[data-testid="stButton"] > button {
 .answer-box { background:#eaf7f0; padding:22px; border-radius:12px; border:1px solid #c3e6cb; font-size:18px; line-height:2; }
 .disclaimer-box { background:#fef9e7; padding:16px; border-radius:12px; border:1px solid #f5d78e; margin-top:18px; font-size:14px; }
 
-/* --- إخفاء كل أشرطة Streamlit الهيدر والفوتر والفلوانج بار عائم بالكامل --- */
+/* --- إخفاء كل أشرطة Streamlit الهيدر والفوتر والفلوانج بار بالكامل --- */
 #MainMenu, header, footer { visibility: hidden !important; display: none !important; }
 div[data-testid="stHeader"], div[data-testid="stToolbar"], div[data-testid="stDecoration"], div[data-testid="stStatusWidget"] { display: none !important; }
 div[data-testid="InputInstructions"], .stAppDeployButton, [data-testid="manage-app-button"] { display: none !important; }
@@ -55,7 +55,7 @@ with c2:
     elif os.path.exists("Logo.png"):
         st.image("Logo.png", use_container_width=True)
 
-# العناوين والنصوص المطابقة تماماً لنسخة Render
+# العناوين والنصوص المطابقة
 st.markdown("<h1 style='text-align:center!important; font-size:32px!important;'>كليات الرؤية - Vision Colleges</h1>", unsafe_allow_html=True)
 st.markdown("<h2 style='text-align:center!important; font-size:22px!important;'>الاستفسار الآلي - وحدة شؤون الطلبة</h2>", unsafe_allow_html=True)
 st.markdown("<p style='text-align:center!important; font-size:18px!important;'>مرحبا بكم في كلية الرؤية بالرياض، نرحب باستفساراتكم حول لوائح وأنظمة الكلية.</p>", unsafe_allow_html=True)
@@ -63,7 +63,7 @@ st.markdown("<p style='text-align:center!important; font-size:18px!important;'>�
 # حقل المدخلات والتفاعل
 q = st.text_input(" ", placeholder="اكتب سؤالك هنا...")
 
-# الزر بحسب تصميم نسخة Render
+# الزر
 col1, col2 = st.columns([1, 2])
 with col1:
     btn = st.button("للرد على استفسارك اضغط هنا")
@@ -366,7 +366,6 @@ if btn and q:
         try:
             from groq import Groq
             
-            # جلب المفتاح سواء تم وضعه في os.environ (Render) أو st.secrets (Streamlit Cloud)
             api_key = os.environ.get("GROQ_API_KEY")
             if not api_key:
                 try:
@@ -393,7 +392,7 @@ if btn and q:
 الإجابة:"""
 
                 completion = client.chat.completions.create(
-                    model="llama-3.1-8b-instant",
+                    model="llama-3.3-70b-versatile",
                     messages=[{"role": "user", "content": prompt}],
                     temperature=0.0,
                 )
@@ -406,4 +405,3 @@ if btn and q:
 
     st.markdown(f"<div class='answer-box' dir='rtl'>{ans}</div>", unsafe_allow_html=True)
     st.markdown(f"<div class='disclaimer-box' dir='rtl'>{TANWIH}</div>", unsafe_allow_html=True)
-
