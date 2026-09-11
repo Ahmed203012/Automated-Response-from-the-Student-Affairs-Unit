@@ -1,6 +1,5 @@
 import os
 import re
-import unicodedata
 import streamlit as st
 import fitz  # PyMuPDF
 import pdfplumber
@@ -86,19 +85,19 @@ st.write("مرحباً بكم في كلية الرؤية بالرياض، نرح
 api_key = os.environ.get("GROQ_API_KEY")
 client = Groq(api_key=api_key) if api_key else None
 
-# دالة توحيد النصوص العربية لتسهيل البحث المطابق
+# دالة توحيد النصوص العربية لتسهيل المطابقة للهمزات والأخطاء الإملائية
 def normalize_arabic(text):
     if not text:
         return ""
     text = re.sub(r'[\u064B-\u0652]', '', text)  # إزالة التشكيل
-    text = re.sub(r'[إأآا]', 'ا', text)         # توحيد الالف
+    text = re.sub(r'[إأآا]', 'ا', text)         # توحيد الألف
     text = re.sub(r'ى', 'ي', text)              # توحيد الياء
     text = re.sub(r'ؤ', 'و', text)
     text = re.sub(r'ئ', 'ي', text)
     text = re.sub(r'ة', 'ه', text)              # توحيد التاء المربوطة
     return text.lower().strip()
 
-# 5. قراءة واستخراج النصوص على مستوى المقاطع (Chunks)
+# 5. قراءة واستخراج النصوص وتقسيمها لمقاطع مركزة
 @st.cache_data(ttl=3600)
 def read_all_chunks():
     chunks = []
@@ -149,8 +148,8 @@ def read_all_chunks():
                 
     return chunks
 
-# 6. دالة تصفية المقاطع بناءً على سؤال الطالب مع تطبيق المعالجة المرنة
-def get_relevant_context(query, chunks, max_chars=15000):
+# 6. دالة تصفية المقاطع بحجم محدد بدقة (6000 حرف لتجنب خطأ 413)
+def get_relevant_context(query, chunks, max_chars=6000):
     norm_query = normalize_arabic(query)
     query_words = [w for w in norm_query.split() if len(w) > 1]
     
@@ -161,14 +160,14 @@ def get_relevant_context(query, chunks, max_chars=15000):
         
         for word in query_words:
             if word in norm_text:
-                score += 2
-            # دعم البحث الجزئي في حالة أخطاء الكتابة
+                score += 3
             elif len(word) > 3 and any(word[:4] in w for w in norm_text.split()):
                 score += 1
                 
-        scored_chunks.append((score, item))
+        if score > 0:
+            scored_chunks.append((score, item))
     
-    # ترتيب المقاطع حسب درجة التطابق
+    # ترتيب المقاطع حسب الأكثر مطابقة
     scored_chunks.sort(key=lambda x: x[0], reverse=True)
     
     selected_text = ""
@@ -179,7 +178,16 @@ def get_relevant_context(query, chunks, max_chars=15000):
         else:
             break
             
-    return selected_text if selected_text else "".join([f"--- المصدر: {c['source']} ---\n{c['text']}\n\n" for c in chunks])[:max_chars]
+    # إذا لم توجد مطابقة مباشرة، نأخذ مقاطع أولية بحجم لا يتجاوز 4000 حرف
+    if not selected_text:
+        for item in chunks:
+            chunk_entry = f"--- المصدر: {item['source']} ---\n{item['text']}\n\n"
+            if len(selected_text) + len(chunk_entry) <= 4000:
+                selected_text += chunk_entry
+            else:
+                break
+                
+    return selected_text
 
 # 7. المدخلات ومعالجة الاستفسار
 q = st.text_input("أدخل استفسارك هنا:", placeholder="ما هي ضوابط الزي الجامعي؟ أو ما هي لجان د. أحمد مرسي؟")
@@ -200,10 +208,10 @@ if btn or q:
 
 التعليمات الصارمة:
 1. قدم الإجابة المباشرة والنهائية باللغة العربية فقط.
-2. لا تستخدم رموز الماركداون العارية مثل النجوم (**) بشكل مشوه في النص.
+2. لا تستخدم رموز الماركداون العارية مثل النجوم (**) بشكل مشوه.
 3. استخرج المعلومة بدقة من النص المرجعي المرفق أدناه.
-4. إذا سُئلت عن الزي أو اللباس، استخرج التفاصيل المذكورة تحت بند الزي أو السلوك.
-5. إذا سُئلت عن شخص أو عضو هيئة تدريس (مثل أحمد مرسي)، ابحث في اللجان والقرارات الإدارية المرفقة واذكر لجنته ودوره بدقة.
+4. إذا سُئلت عن الزي، استخرج التفاصيل المذكورة تحت بند الزي أو السلوك.
+5. إذا سُئلت عن شخص أو عضو هيئة تدريس (مثل أحمد مرسي)، ابحث في اللجان المرفقة واذكر لجنته ودوره بدقة.
 
 النص المرجعي المستخرج:
 {relevant_context}
@@ -227,14 +235,13 @@ if btn or q:
                         completion = client.chat.completions.create(
                             model=model_name,
                             messages=[
-                                {"role": "system", "content": "أنت مساعد آلي رسمي لجامعة كليات الرؤية، تجيب باللغة العربية بوضوح ودقة بناءً على المستندات المتاحة فقط."},
+                                {"role": "system", "content": "أنت مساعد آلي رسمي لكليات الرؤية، تجيب باللغة العربية بوضوح ودقة بناءً على المستندات المتاحة فقط."},
                                 {"role": "user", "content": prompt}
                             ],
                             temperature=0.1,
                         )
                         if completion and completion.choices:
                             ans = completion.choices[0].message.content.strip()
-                            # إزالة النجوم الزائدة من الإجابة لتنسيق أفضل
                             ans = ans.replace("**", "")
                             break
                     except Exception as ex:
