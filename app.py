@@ -8,12 +8,10 @@ st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap');
 
-/* التنسيق العام والاتجاه من اليمين للشمال */
 html, body, [data-testid="stAppViewContainer"] { direction: rtl!important; text-align: right!important; }
 * { font-family: 'Tajawal', sans-serif!important; direction: rtl!important; text-align: right!important; }
 div[data-testid="stImage"] { display:flex!important; justify-content:center!important; }
 
-/* تنسيق زر البحث والأجوبة */
 div[data-testid="stButton"] > button { 
     background:#c5a880!important; 
     color:white!important; 
@@ -26,22 +24,14 @@ div[data-testid="stButton"] > button {
 .answer-box { background:#eaf7f0; padding:22px; border-radius:12px; border:1px solid #c3e6cb; font-size:18px; line-height:2; }
 .disclaimer-box { background:#fef9e7; padding:16px; border-radius:12px; border:1px solid #f5d78e; margin-top:18px; font-size:14px; }
 
-/* --- إخفاء كل أشرطة Streamlit الهيدر والفوتر والفلوانج بار بالكامل --- */
 #MainMenu, header, footer { visibility: hidden !important; display: none !important; }
 div[data-testid="stHeader"], div[data-testid="stToolbar"], div[data-testid="stDecoration"], div[data-testid="stStatusWidget"] { display: none !important; }
 div[data-testid="InputInstructions"], .stAppDeployButton, [data-testid="manage-app-button"] { display: none !important; }
-
-/* إخفاء الأزرار العائمة العلوية والسفلية */
-div[data-testid="stAppToolbar"] { display: none !important; visibility: hidden !important; }
-div[data-testid="stActionButton"] { display: none !important; visibility: hidden !important; }
-div[data-testid="stSidebarCollapseButton"] { display: none !important; }
+div[data-testid="stAppToolbar"], div[data-testid="stActionButton"], div[data-testid="stSidebarCollapseButton"] { display: none !important; visibility: hidden !important; }
 .stAppFooter, footer { display: none !important; }
-
-/* إخفاء شارة Streamlit والشعارات العائمة للجوال */
 div[class*="stViewerBadge"], .viewerBadge_container__1A52n, .viewerBadge_link__1S137, div[class*="viewerBadge"] { display: none !important; }
 button[title="View app source"], a[href*="streamlit.io"], button[class*="viewerBadge"] { display: none !important; }
 
-/* إلغاء الحواف والهوامش السفلية */
 footer { position: fixed; bottom: -100px; }
 .stApp { margin-bottom: 0px !important; padding-bottom: 0px !important; }
 </style>
@@ -55,15 +45,12 @@ with c2:
     elif os.path.exists("Logo.png"):
         st.image("Logo.png", use_container_width=True)
 
-# العناوين والنصوص المطابقة
 st.markdown("<h1 style='text-align:center!important; font-size:32px!important;'>كليات الرؤية - Vision Colleges</h1>", unsafe_allow_html=True)
 st.markdown("<h2 style='text-align:center!important; font-size:22px!important;'>الاستفسار الآلي - وحدة شؤون الطلبة</h2>", unsafe_allow_html=True)
 st.markdown("<p style='text-align:center!important; font-size:18px!important;'>مرحبا بكم في كلية الرؤية بالرياض، نرحب باستفساراتكم حول لوائح وأنظمة الكلية.</p>", unsafe_allow_html=True)
 
-# حقل المدخلات والتفاعل
 q = st.text_input(" ", placeholder="اكتب سؤالك هنا...")
 
-# الزر
 col1, col2 = st.columns([1, 2])
 with col1:
     btn = st.button("للرد على استفسارك اضغط هنا")
@@ -76,7 +63,6 @@ TANWIH = (
     f"<br><a href='{LINK}' target='_blank' style='direction:ltr; display:inline-block;'>{LINK}</a>"
 )
 
-# --- دالة توحيد وتطبيع النص العربي لتجاهل الهمزات والألفات والتاء المربوطة والحركات ---
 def normalize_arabic(text: str) -> str:
     if not text:
         return ""
@@ -366,8 +352,9 @@ if btn and q:
         try:
             from groq import Groq
             
-            # تم تعيين مفتاح الـ API الخاص بك هنا بشكل مباشر
-            api_key = "Gsk_SdioIYJR6bE1evvMKq8gWGdyb3FYa6QcKu4RZoVhgIx4VVDTkUsW"
+            # جلب المفتاح مع تنظيفه التلقائي من أي مسافات أو أسطر جديدة
+            raw_key = os.getenv("GROQ_API_KEY", "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")
+            api_key = raw_key.strip().replace("\n", "").replace("\r", "")
 
             client = Groq(api_key=api_key)
             prompt = f"""أنت مساعد شؤون الطلبة في كليات الرؤية بالرياض.
@@ -384,7 +371,6 @@ if btn and q:
 السؤال: {q}
 الإجابة:"""
 
-            # استخدام النموذج الرسمي المعتمد والمستقر في منصة Groq
             completion = client.chat.completions.create(
                 model="llama-3.1-70b-versatile",
                 messages=[{"role": "user", "content": prompt}],
