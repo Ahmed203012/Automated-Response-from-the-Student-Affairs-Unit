@@ -84,7 +84,7 @@ st.write("مرحباً بكم في كلية الرؤية بالرياض، نرح
 api_key = os.environ.get("GROQ_API_KEY")
 client = Groq(api_key=api_key) if api_key else None
 
-# 5. قراءة واستخراج النصوص على مستوى المقاطع (Chunks)
+# 5. قراءة واستخراج النصوص على مستوى المقاطع (Chunks) لجميع الملفات أياً كان عددها
 @st.cache_data(ttl=3600)
 def read_all_chunks():
     chunks = []
@@ -94,7 +94,7 @@ def read_all_chunks():
         file_path = os.path.join(folder_path, file)
         
         # قراءة ملفات PDF
-        if file.endswith(".pdf"):
+        if file.lower().endswith(".pdf"):
             try:
                 with pdfplumber.open(file_path) as pdf:
                     for i, page in enumerate(pdf.pages):
@@ -112,7 +112,7 @@ def read_all_chunks():
                     pass
                     
         # قراءة ملفات Word
-        elif file.endswith(".docx"):
+        elif file.lower().endswith(".docx"):
             try:
                 doc = Document(file_path)
                 full_text = [p.text for p in doc.paragraphs if p.text.strip()]
@@ -122,7 +122,7 @@ def read_all_chunks():
                 pass
                 
         # قراءة ملفات Excel
-        elif file.endswith(".xlsx") or file.endswith(".xls"):
+        elif file.lower().endswith(".xlsx") or file.lower().endswith(".xls"):
             try:
                 excel_file = pd.ExcelFile(file_path)
                 for sheet_name in excel_file.sheet_names:
@@ -136,7 +136,7 @@ def read_all_chunks():
     return chunks
 
 # 6. دالة تصفية المقاطع بناءً على سؤال الطالب (Smart Retrieval)
-def get_relevant_context(query, chunks, max_chars=8000):
+def get_relevant_context(query, chunks, max_chars=12000):
     query_words = [w.strip().lower() for w in query.split() if len(w.strip()) > 2]
     
     scored_chunks = []
@@ -153,7 +153,6 @@ def get_relevant_context(query, chunks, max_chars=8000):
     
     selected_text = ""
     for score, item in scored_chunks:
-        # إذا لم نجد تطابق للكلمات، نأخذ المقاطع الأولى احتياطاً
         chunk_entry = f"--- المصدر: {item['source']} ---\n{item['text']}\n\n"
         if len(selected_text) + len(chunk_entry) <= max_chars:
             selected_text += chunk_entry
