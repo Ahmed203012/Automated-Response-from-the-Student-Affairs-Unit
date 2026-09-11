@@ -1,4 +1,6 @@
 import os
+import re
+import unicodedata
 import streamlit as st
 import fitz  # PyMuPDF
 import pdfplumber
@@ -84,6 +86,18 @@ st.write("مرحباً بكم في كلية الرؤية بالرياض، نرح
 api_key = os.environ.get("GROQ_API_KEY")
 client = Groq(api_key=api_key) if api_key else None
 
+# دالة توحيد النصوص العربية لتسهيل البحث المطابق
+def normalize_arabic(text):
+    if not text:
+        return ""
+    text = re.sub(r'[\u064B-\u0652]', '', text)  # إزالة التشكيل
+    text = re.sub(r'[إأآا]', 'ا', text)         # توحيد الالف
+    text = re.sub(r'ى', 'ي', text)              # توحيد الياء
+    text = re.sub(r'ؤ', 'و', text)
+    text = re.sub(r'ئ', 'ي', text)
+    text = re.sub(r'ة', 'ه', text)              # توحيد التاء المربوطة
+    return text.lower().strip()
+
 # 5. قراءة واستخراج النصوص على مستوى المقاطع (Chunks)
 @st.cache_data(ttl=3600)
 def read_all_chunks():
@@ -99,14 +113,14 @@ def read_all_chunks():
                 with pdfplumber.open(file_path) as pdf:
                     for i, page in enumerate(pdf.pages):
                         text = page.extract_text()
-                        if text and len(text.strip()) > 10:
+                        if text and len(text.strip()) > 5:
                             chunks.append({"source": f"{file} (صفحة {i+1})", "text": text})
             except Exception:
                 try:
                     doc = fitz.open(file_path)
                     for i, page in enumerate(doc):
                         text = page.get_text()
-                        if text and len(text.strip()) > 10:
+                        if text and len(text.strip()) > 5:
                             chunks.append({"source": f"{file} (صفحة {i+1})", "text": text})
                 except Exception:
                     pass
@@ -135,25 +149,30 @@ def read_all_chunks():
                 
     return chunks
 
-# 6. دالة تصفية المقاطع بناءً على سؤال الطالب (Smart Retrieval)
-def get_relevant_context(query, chunks, max_chars=8000):
-    query_words = [w.strip().lower() for w in query.split() if len(w.strip()) > 2]
+# 6. دالة تصفية المقاطع بناءً على سؤال الطالب مع تطبيق المعالجة المرنة
+def get_relevant_context(query, chunks, max_chars=15000):
+    norm_query = normalize_arabic(query)
+    query_words = [w for w in norm_query.split() if len(w) > 1]
     
     scored_chunks = []
     for item in chunks:
         score = 0
-        text_lower = item["text"].lower()
+        norm_text = normalize_arabic(item["text"])
+        
         for word in query_words:
-            if word in text_lower:
+            if word in norm_text:
+                score += 2
+            # دعم البحث الجزئي في حالة أخطاء الكتابة
+            elif len(word) > 3 and any(word[:4] in w for w in norm_text.split()):
                 score += 1
+                
         scored_chunks.append((score, item))
     
-    # ترتيب المقاطع حسب الأكثر مطابقة
+    # ترتيب المقاطع حسب درجة التطابق
     scored_chunks.sort(key=lambda x: x[0], reverse=True)
     
     selected_text = ""
     for score, item in scored_chunks:
-        # إذا لم نجد تطابق للكلمات، نأخذ المقاطع الأولى احتياطاً
         chunk_entry = f"--- المصدر: {item['source']} ---\n{item['text']}\n\n"
         if len(selected_text) + len(chunk_entry) <= max_chars:
             selected_text += chunk_entry
@@ -163,7 +182,7 @@ def get_relevant_context(query, chunks, max_chars=8000):
     return selected_text if selected_text else "".join([f"--- المصدر: {c['source']} ---\n{c['text']}\n\n" for c in chunks])[:max_chars]
 
 # 7. المدخلات ومعالجة الاستفسار
-q = st.text_input("أدخل استفسارك هنا:", placeholder="ما هي المدة المسموح بها لتقديم عذر الوفاة؟")
+q = st.text_input("أدخل استفسارك هنا:", placeholder="ما هي ضوابط الزي الجامعي؟ أو ما هي لجان د. أحمد مرسي؟")
 
 btn = st.button("للرد على استفسارك اضغط هنا")
 
@@ -175,24 +194,23 @@ if btn or q:
     else:
         with st.spinner("جاري البحث في اللوائح والأنظمة..."):
             all_chunks = read_all_chunks()
-            
-            # جلب النظائر الأكثر ارتباطاً بسؤال الطالب
             relevant_context = get_relevant_context(q, all_chunks)
             
             prompt = f"""أنت مساعد آلي رسمي لوحدة شؤون الطلبة في كليات الرؤية بالرياض.
 
 التعليمات الصارمة:
-1. قدم الإجابة النهائية المباشرة باللغة العربية فقط.
-2. يمنع منعاً باتاً كتابة أفكارك أو خطوات البحث باللغة الإنجليزية.
-3. استخرج الإجابة بناءً على النص المرجعي المرفق بأسلوب مهذب ومباشر.
-4. إذا لم تجد الإجابة صراحة في النص، وجّه الطالب بلباقة لمراجعة وحدة شؤون الطلبة.
+1. قدم الإجابة المباشرة والنهائية باللغة العربية فقط.
+2. لا تستخدم رموز الماركداون العارية مثل النجوم (**) بشكل مشوه في النص.
+3. استخرج المعلومة بدقة من النص المرجعي المرفق أدناه.
+4. إذا سُئلت عن الزي أو اللباس، استخرج التفاصيل المذكورة تحت بند الزي أو السلوك.
+5. إذا سُئلت عن شخص أو عضو هيئة تدريس (مثل أحمد مرسي)، ابحث في اللجان والقرارات الإدارية المرفقة واذكر لجنته ودوره بدقة.
 
 النص المرجعي المستخرج:
 {relevant_context}
 
 سؤال الطالب: {q}
 
-الإجابة النهائية (بالعربية فقط):"""
+الإجابة المباشرة باللغة العربية:"""
 
             ans = ""
             last_err = ""
@@ -209,13 +227,15 @@ if btn or q:
                         completion = client.chat.completions.create(
                             model=model_name,
                             messages=[
-                                {"role": "system", "content": "أنت مساعد آلي تجيب باللغة العربية المباشرة فقط دون تفكير بالإنجليزية."},
+                                {"role": "system", "content": "أنت مساعد آلي رسمي لجامعة كليات الرؤية، تجيب باللغة العربية بوضوح ودقة بناءً على المستندات المتاحة فقط."},
                                 {"role": "user", "content": prompt}
                             ],
                             temperature=0.1,
                         )
                         if completion and completion.choices:
                             ans = completion.choices[0].message.content.strip()
+                            # إزالة النجوم الزائدة من الإجابة لتنسيق أفضل
+                            ans = ans.replace("**", "")
                             break
                     except Exception as ex:
                         last_err = str(ex)
