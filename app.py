@@ -1,4 +1,5 @@
 import os
+import re
 import streamlit as st
 import fitz  # PyMuPDF
 import pdfplumber
@@ -84,7 +85,15 @@ st.write("مرحباً بكم في كلية الرؤية بالرياض، نرح
 api_key = os.environ.get("GROQ_API_KEY")
 client = Groq(api_key=api_key) if api_key else None
 
-# 5. قراءة واستخراج النصوص على مستوى المقاطع (Chunks) لجميع الملفات أياً كان عددها
+def normalize_arabic(text):
+    if not text:
+        return ""
+    text = str(text)
+    text = re.sub(r'[إأآا]', 'ا', text)
+    text = text.replace("عبد ", "عبد")
+    return text.lower().strip()
+
+# 5. قراءة واستخراج النصوص على مستوى المقاطع (Chunks)
 @st.cache_data(ttl=3600)
 def read_all_chunks():
     chunks = []
@@ -121,34 +130,48 @@ def read_all_chunks():
             except Exception:
                 pass
                 
-        # قراءة ملفات Excel
+        # قراءة ملفات Excel بشكل تفصيلي للأنشطة والأشخاص والإيميلات
         elif file.lower().endswith(".xlsx") or file.lower().endswith(".xls"):
             try:
                 excel_file = pd.ExcelFile(file_path)
                 for sheet_name in excel_file.sheet_names:
-                    df = pd.read_excel(file_path, sheet_name=sheet_name)
-                    text = df.to_string()
-                    if text:
-                        chunks.append({"source": f"{file} (ورقة: {sheet_name})", "text": text})
+                    df = pd.read_excel(file_path, sheet_name=sheet_name).dropna(how='all')
+                    sheet_lines = []
+                    for _, row in df.iterrows():
+                        row_str = " | ".join([f"{col}: {val}" for col, val in row.items() if pd.notna(val)])
+                        if row_str.strip():
+                            sheet_lines.append(row_str)
+                    
+                    if sheet_lines:
+                        # تقسيم الصفوف إلى مجموعات (Chunks) لضمان القراءة الكاملة
+                        step = 20
+                        for i in range(0, len(sheet_lines), step):
+                            chunk_text = "\n".join(sheet_lines[i:i+step])
+                            chunks.append({"source": f"{file} (ورقة: {sheet_name} - صفوف {i+1}-{i+len(sheet_lines[i:i+step])})", "text": chunk_text})
             except Exception:
                 pass
                 
     return chunks
 
 # 6. دالة تصفية المقاطع بناءً على سؤال الطالب (Smart Retrieval)
-def get_relevant_context(query, chunks, max_chars=12000):
-    query_words = [w.strip().lower() for w in query.split() if len(w.strip()) > 2]
+def get_relevant_context(query, chunks, max_chars=14000):
+    norm_query = normalize_arabic(query)
+    query_words = [w for w in norm_query.split() if len(w) > 2]
     
     scored_chunks = []
     for item in chunks:
         score = 0
-        text_lower = item["text"].lower()
+        norm_text = normalize_arabic(item["text"])
         for word in query_words:
-            if word in text_lower:
-                score += 1
+            if word in norm_text:
+                score += 2
+        
+        # مطابقة الجملة أو الاسم كاملاً
+        if norm_query in norm_text:
+            score += 10
+            
         scored_chunks.append((score, item))
     
-    # ترتيب المقاطع حسب الأكثر مطابقة
     scored_chunks.sort(key=lambda x: x[0], reverse=True)
     
     selected_text = ""
@@ -162,7 +185,7 @@ def get_relevant_context(query, chunks, max_chars=12000):
     return selected_text if selected_text else "".join([f"--- المصدر: {c['source']} ---\n{c['text']}\n\n" for c in chunks])[:max_chars]
 
 # 7. المدخلات ومعالجة الاستفسار
-q = st.text_input("أدخل استفسارك هنا:", placeholder="ما هي المدة المسموح بها لتقديم عذر الوفاة؟")
+q = st.text_input("أدخل استفسارك هنا:", placeholder="ما هو ايميل احمد عبدالرحمن مرسي؟")
 
 btn = st.button("للرد على استفسارك اضغط هنا")
 
@@ -184,7 +207,8 @@ if btn or q:
 1. قدم الإجابة النهائية المباشرة باللغة العربية فقط.
 2. يمنع منعاً باتاً كتابة أفكارك أو خطوات البحث باللغة الإنجليزية.
 3. استخرج الإجابة بناءً على النص المرجعي المرفق بأسلوب مهذب ومباشر.
-4. إذا لم تجد الإجابة صراحة في النص، وجّه الطالب بلباقة لمراجعة وحدة شؤون الطلبة.
+4. إذا سُئلت عن بريد إلكتروني أو رقم أو معلومة محددة وموجودة في النص المرجعي، أظهرها صراحة وبشكل كامل.
+5. إذا لم تجد الإجابة صراحة في النص، وجّه الطالب بلباقة لمراجعة وحدة شؤون الطلبة.
 
 النص المرجعي المستخرج:
 {relevant_context}
