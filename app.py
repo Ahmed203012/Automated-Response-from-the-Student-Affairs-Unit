@@ -366,18 +366,11 @@ if btn and q:
         try:
             from groq import Groq
             
-            api_key = os.environ.get("GROQ_API_KEY")
-            if not api_key:
-                try:
-                    api_key = st.secrets["GROQ_API_KEY"]
-                except Exception:
-                    api_key = None
+            # تم تعيين مفتاح الـ API الخاص بك هنا بشكل مباشر
+            api_key = "Gsk_SdioIYJR6bE1evvMKq8gWGdyb3FYa6QcKu4RZoVhgIx4VVDTkUsW"
 
-            if not api_key:
-                ans = "خطأ: لم يتم العثور على مفتاح GROQ_API_KEY. يُرجى إضافته في Environment Variables في Render."
-            else:
-                client = Groq(api_key=api_key)
-                prompt = f"""أنت مساعد شؤون الطلبة في كليات الرؤية بالرياض.
+            client = Groq(api_key=api_key)
+            prompt = f"""أنت مساعد شؤون الطلبة في كليات الرؤية بالرياض.
 مهمتك:
 1. استخرج الإجابة بدقة من "النص المرجعي" المرفق فقط.
 2. إذا سُئلت عن أنشطة أو فعاليات شهر معين، اذكر الأنشطة المذكورة في النص المرجعي على شكل نقاط بوضوح.
@@ -391,13 +384,13 @@ if btn and q:
 السؤال: {q}
 الإجابة:"""
 
-                # تجربة نموذج Llama3 الأكثر استقراراً وقبولاً لكافة مفاتيح Groq
-                completion = client.chat.completions.create(
-                    model="llama3-70b-8192",
-                    messages=[{"role": "user", "content": prompt}],
-                    temperature=0.0,
-                )
-                ans = completion.choices[0].message.content.strip()
+            # استخدام النموذج الرسمي المعتمد والمستقر في منصة Groq
+            completion = client.chat.completions.create(
+                model="llama-3.1-70b-versatile",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.0,
+            )
+            ans = completion.choices[0].message.content.strip()
         except Exception as e:
             ans = f"خطأ في الاتصال بـ Groq: {e}"
 
