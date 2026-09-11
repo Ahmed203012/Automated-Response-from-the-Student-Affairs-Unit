@@ -84,7 +84,7 @@ st.write("مرحباً بكم في كلية الرؤية بالرياض، نرح
 api_key = os.environ.get("GROQ_API_KEY")
 client = Groq(api_key=api_key) if api_key else None
 
-# 5. قراءة الملفات بالتخزين المؤقت
+# 5. قراءة واستخراج النصوص على مستوى المقاطع (Chunks)
 @st.cache_data(ttl=3600)
 def read_all_chunks():
     chunks = []
@@ -92,30 +92,36 @@ def read_all_chunks():
     
     for file in os.listdir(folder_path):
         file_path = os.path.join(folder_path, file)
+        
+        # قراءة ملفات PDF
         if file.endswith(".pdf"):
             try:
                 with pdfplumber.open(file_path) as pdf:
                     for i, page in enumerate(pdf.pages):
                         text = page.extract_text()
-                        if text:
-                            chunks.append(f"--- المصدر: {file} (صفحة {i+1}) ---\n{text}")
+                        if text and len(text.strip()) > 10:
+                            chunks.append({"source": f"{file} (صفحة {i+1})", "text": text})
             except Exception:
                 try:
                     doc = fitz.open(file_path)
                     for i, page in enumerate(doc):
                         text = page.get_text()
-                        if text:
-                            chunks.append(f"--- المصدر: {file} (صفحة {i+1}) ---\n{text}")
+                        if text and len(text.strip()) > 10:
+                            chunks.append({"source": f"{file} (صفحة {i+1})", "text": text})
                 except Exception:
                     pass
+                    
+        # قراءة ملفات Word
         elif file.endswith(".docx"):
             try:
                 doc = Document(file_path)
                 full_text = [p.text for p in doc.paragraphs if p.text.strip()]
                 if full_text:
-                    chunks.append(f"--- المصدر: {file} ---\n" + "\n".join(full_text))
+                    chunks.append({"source": file, "text": "\n".join(full_text)})
             except Exception:
                 pass
+                
+        # قراءة ملفات Excel
         elif file.endswith(".xlsx") or file.endswith(".xls"):
             try:
                 excel_file = pd.ExcelFile(file_path)
@@ -123,13 +129,40 @@ def read_all_chunks():
                     df = pd.read_excel(file_path, sheet_name=sheet_name)
                     text = df.to_string()
                     if text:
-                        chunks.append(f"--- المصدر: {file} (ورقة: {sheet_name}) ---\n{text}")
+                        chunks.append({"source": f"{file} (ورقة: {sheet_name})", "text": text})
             except Exception:
                 pass
                 
     return chunks
 
-# 6. المدخلات ومعالجة الاستفسار
+# 6. دالة تصفية المقاطع بناءً على سؤال الطالب (Smart Retrieval)
+def get_relevant_context(query, chunks, max_chars=8000):
+    query_words = [w.strip().lower() for w in query.split() if len(w.strip()) > 2]
+    
+    scored_chunks = []
+    for item in chunks:
+        score = 0
+        text_lower = item["text"].lower()
+        for word in query_words:
+            if word in text_lower:
+                score += 1
+        scored_chunks.append((score, item))
+    
+    # ترتيب المقاطع حسب الأكثر مطابقة
+    scored_chunks.sort(key=lambda x: x[0], reverse=True)
+    
+    selected_text = ""
+    for score, item in scored_chunks:
+        # إذا لم نجد تطابق للكلمات، نأخذ المقاطع الأولى احتياطاً
+        chunk_entry = f"--- المصدر: {item['source']} ---\n{item['text']}\n\n"
+        if len(selected_text) + len(chunk_entry) <= max_chars:
+            selected_text += chunk_entry
+        else:
+            break
+            
+    return selected_text if selected_text else "".join([f"--- المصدر: {c['source']} ---\n{c['text']}\n\n" for c in chunks])[:max_chars]
+
+# 7. المدخلات ومعالجة الاستفسار
 q = st.text_input("أدخل استفسارك هنا:", placeholder="ما هي المدة المسموح بها لتقديم عذر الوفاة؟")
 
 btn = st.button("للرد على استفسارك اضغط هنا")
@@ -140,43 +173,46 @@ if btn or q:
     elif not client:
         st.error("مفتاح GROQ_API_KEY غير معرف في بيئة العمل.")
     else:
-        with st.spinner("جاري جلب الإجابة..."):
+        with st.spinner("جاري البحث في اللوائح والأنظمة..."):
             all_chunks = read_all_chunks()
-            corpus = "\n\n".join(all_chunks)
             
-            # اقتطاع النص المرجعي لمنع تجاوز سعة النموذج
-            truncated_corpus = corpus[:10000]
+            # جلب النظائر الأكثر ارتباطاً بسؤال الطالب
+            relevant_context = get_relevant_context(q, all_chunks)
             
-            prompt = f"""أنت مساعد آلي لوحدة شؤون الطلبة في كليات الرؤية بالرياض.
-إليك النص المرجعي من اللوائح والأنظمة الرسمية للكلية:
+            prompt = f"""أنت مساعد آلي رسمي لوحدة شؤون الطلبة في كليات الرؤية بالرياض.
 
-النص المرجعي:
-{truncated_corpus}
+التعليمات الصارمة:
+1. قدم الإجابة النهائية المباشرة باللغة العربية فقط.
+2. يمنع منعاً باتاً كتابة أفكارك أو خطوات البحث باللغة الإنجليزية.
+3. استخرج الإجابة بناءً على النص المرجعي المرفق بأسلوب مهذب ومباشر.
+4. إذا لم تجد الإجابة صراحة في النص، وجّه الطالب بلباقة لمراجعة وحدة شؤون الطلبة.
 
-السؤال: {q}
+النص المرجعي المستخرج:
+{relevant_context}
 
-الإجابة: بناءً على اللوائح المرفقة فقط، أجب على سؤال الطالب بدقة ووضوح وبأسلوب مهذب ومباشر باللغة العربية. إذا لم تجد الإجابة في النص المرجعي، أخبر الطالب بلباقة أن يراجع وحدة شؤون الطلبة مباشرة."""
+سؤال الطالب: {q}
+
+الإجابة النهائية (بالعربية فقط):"""
 
             ans = ""
             last_err = ""
 
             try:
-                # استعلام ديناميكي لجلب النماذج المتاحة فعلياً في حسابك من Groq
                 models_list = client.models.list().data
-                
-                # استبعاد الصوتيات والنماذج الخاصة التي تتطلب موافقة شروط
                 valid_models = [
                     m.id for m in models_list 
                     if not any(x in m.id for x in ["whisper", "safetensors", "canopylabs", "guard", "vision"])
                 ]
 
-                # جلب النموذج المناسب والتجربة بالتوالي
                 for model_name in valid_models:
                     try:
                         completion = client.chat.completions.create(
                             model=model_name,
-                            messages=[{"role": "user", "content": prompt}],
-                            temperature=0.0,
+                            messages=[
+                                {"role": "system", "content": "أنت مساعد آلي تجيب باللغة العربية المباشرة فقط دون تفكير بالإنجليزية."},
+                                {"role": "user", "content": prompt}
+                            ],
+                            temperature=0.1,
                         )
                         if completion and completion.choices:
                             ans = completion.choices[0].message.content.strip()
@@ -192,7 +228,7 @@ if btn or q:
 
             st.markdown(f"<div class='answer-box'>{ans}</div>", unsafe_allow_html=True)
 
-# 7. التنويه السفلي
+# 8. التنويه السفلي
 st.markdown("""
 <div class='disclaimer-box'>
 تنبيـه: هذا برنامج رد آلي ويمكن أن تكون الإجابات في بعض الأحيان غير دقيقة، وعليه تعتبر اللوائح والأنظمة الرسمية المستمدة والمعلنة عبر الرابط التالي هي المرجع المعتمد والأخير للكلية:<br>
