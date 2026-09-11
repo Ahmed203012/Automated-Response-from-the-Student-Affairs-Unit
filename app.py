@@ -91,9 +91,10 @@ def normalize_arabic(text):
     text = str(text)
     text = re.sub(r'[إأآا]', 'ا', text)
     text = text.replace("عبد ", "عبد")
+    text = re.sub(r'\s+', ' ', text)
     return text.lower().strip()
 
-# 5. قراءة واستخراج النصوص على مستوى المقاطع (Chunks)
+# 5. قراءة واستخراج النصوص على مستوى المقاطع (Chunks) لكل الـ 27 ملفاً
 @st.cache_data(ttl=3600)
 def read_all_chunks():
     chunks = []
@@ -130,7 +131,7 @@ def read_all_chunks():
             except Exception:
                 pass
                 
-        # قراءة ملفات Excel بشكل تفصيلي للأنشطة والأشخاص والإيميلات
+        # قراءة ملفات Excel
         elif file.lower().endswith(".xlsx") or file.lower().endswith(".xls"):
             try:
                 excel_file = pd.ExcelFile(file_path)
@@ -143,8 +144,7 @@ def read_all_chunks():
                             sheet_lines.append(row_str)
                     
                     if sheet_lines:
-                        # تقسيم الصفوف إلى مجموعات (Chunks) لضمان القراءة الكاملة
-                        step = 20
+                        step = 25
                         for i in range(0, len(sheet_lines), step):
                             chunk_text = "\n".join(sheet_lines[i:i+step])
                             chunks.append({"source": f"{file} (ورقة: {sheet_name} - صفوف {i+1}-{i+len(sheet_lines[i:i+step])})", "text": chunk_text})
@@ -153,22 +153,30 @@ def read_all_chunks():
                 
     return chunks
 
-# 6. دالة تصفية المقاطع بناءً على سؤال الطالب (Smart Retrieval)
-def get_relevant_context(query, chunks, max_chars=14000):
+# 6. دالة تصفية المقاطع الذكية وتوسيع نطاق البحث للأسماء واللجان
+def get_relevant_context(query, chunks, max_chars=16000):
     norm_query = normalize_arabic(query)
-    query_words = [w for w in norm_query.split() if len(w) > 2]
+    # استخراج الكلمات المعنوية (أكثر من حرفين واستبعاد أدوات الاستفهام)
+    stop_words = ["ما", "هي", "ماهي", "من", "في", "على", "عن", "التي", "الذي", "بها", "ماهي", "اين"]
+    query_words = [w for w in norm_query.split() if len(w) > 2 and w not in stop_words]
     
     scored_chunks = []
     for item in chunks:
         score = 0
         norm_text = normalize_arabic(item["text"])
+        
+        # إعطاء أولوية عالية جداً لمطابقة اسم الشخص
         for word in query_words:
             if word in norm_text:
-                score += 2
+                score += 3
         
-        # مطابقة الجملة أو الاسم كاملاً
+        # مطابقة الاسم بالكامل
         if norm_query in norm_text:
-            score += 10
+            score += 15
+            
+        # إذا كان المقطع قراراً إدارياً أو يحتوي على كلمة لجنة/لجان
+        if "لجنة" in norm_text or "قرار" in norm_text or "مجلس" in norm_text:
+            score += 2
             
         scored_chunks.append((score, item))
     
@@ -185,7 +193,7 @@ def get_relevant_context(query, chunks, max_chars=14000):
     return selected_text if selected_text else "".join([f"--- المصدر: {c['source']} ---\n{c['text']}\n\n" for c in chunks])[:max_chars]
 
 # 7. المدخلات ومعالجة الاستفسار
-q = st.text_input("أدخل استفسارك هنا:", placeholder="ما هو ايميل احمد عبدالرحمن مرسي؟")
+q = st.text_input("أدخل استفسارك هنا:", placeholder="ما هي اللجان التي بها أحمد مرسي؟")
 
 btn = st.button("للرد على استفسارك اضغط هنا")
 
@@ -195,10 +203,9 @@ if btn or q:
     elif not client:
         st.error("مفتاح GROQ_API_KEY غير معرف في بيئة العمل.")
     else:
-        with st.spinner("جاري البحث في اللوائح والأنظمة..."):
+        with st.spinner("جاري البحث في اللوائح والقرارات الإدارية..."):
             all_chunks = read_all_chunks()
             
-            # جلب النظائر الأكثر ارتباطاً بسؤال الطالب
             relevant_context = get_relevant_context(q, all_chunks)
             
             prompt = f"""أنت مساعد آلي رسمي لوحدة شؤون الطلبة في كليات الرؤية بالرياض.
@@ -207,8 +214,8 @@ if btn or q:
 1. قدم الإجابة النهائية المباشرة باللغة العربية فقط.
 2. يمنع منعاً باتاً كتابة أفكارك أو خطوات البحث باللغة الإنجليزية.
 3. استخرج الإجابة بناءً على النص المرجعي المرفق بأسلوب مهذب ومباشر.
-4. إذا سُئلت عن بريد إلكتروني أو رقم أو معلومة محددة وموجودة في النص المرجعي، أظهرها صراحة وبشكل كامل.
-5. إذا لم تجد الإجابة صراحة في النص، وجّه الطالب بلباقة لمراجعة وحدة شؤون الطلبة.
+4. إذا سُئلت عن اللجان أو التكاليف الخاصة بعضو معين، استخرج كافة اللجان والقرارات الإدارية التي ورد اسمه فيها مع ذكر اسم اللجنة ورقم/تاريخ القرار إن وجد.
+5. إذا لم تجد الإجابة صراحة في النص المرجعي، وجّه الطالب بلباقة لمراجعة وحدة شؤون الطلبة.
 
 النص المرجعي المستخرج:
 {relevant_context}
