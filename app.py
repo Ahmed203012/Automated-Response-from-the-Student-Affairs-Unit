@@ -63,7 +63,6 @@ submit_btn = st.button("للرد على استفسارك اضغط هنا")
 # ==========================================
 # 4. النص المرجعي التفصيلي + التعليمات (System Prompt & Knowledge Base)
 # ==========================================
-# ملاحظة: تم تضمين تفاصيل اللوائح والنصوص كاملة هنا لضمان إجابة الذكاء الاصطناعي بشكل دقيق
 SYSTEM_INSTRUCTIONS = """
 Role: Official AI assistant for Student Affairs at Vision Colleges in Riyadh.
 
