@@ -9,7 +9,7 @@ from groq import Groq
 # 1. إعداد الصفحة
 st.set_page_config(page_title="استفسار شؤون الطلبة - كليات الرؤية", page_icon="🎓", layout="centered")
 
-# 2. حقن CSS لدعم اتجاه RTL والأنماط الرسمية
+# 2. حقن CSS لدعم اتجاه RTL والتنسيق العربي
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap');
@@ -144,22 +144,25 @@ if btn or q:
             all_chunks = read_all_chunks()
             corpus = "\n\n".join(all_chunks)
             
+            # اقتطاع النص المرجعي لحماية الطلب من تجاوز حجم الـ Context Limit الخاص بـ Groq
+            truncated_corpus = corpus[:12000]
+            
             prompt = f"""أنت مساعد آلي لوحدة شؤون الطلبة في كليات الرؤية بالرياض.
 إليك النص المرجعي من اللوائح والأنظمة الرسمية للكلية:
 
 النص المرجعي:
-{corpus}
+{truncated_corpus}
 
 السؤال: {q}
 
 الإجابة: بناءً على اللوائح المرفقة فقط، أجب على سؤال الطالب بدقة ووضوح وبأسلوب مهذب ومباشر باللغة العربية. إذا لم تجد الإجابة في النص المرجعي، أخبر الطالب بلباقة أن يراجع وحدة شؤون الطلبة مباشرة."""
 
-            # جلب النماذج المتاحة ديناميكياً لتفادي خطأ 404 نهائياً
+            # جلب النماذج المتاحة ديناميكياً لتفادي خطأ 404
             ans = ""
             try:
                 available_models = [m.id for m in client.models.list().data if "whisper" not in m.id and "safetensors" not in m.id]
                 
-                # جلب النموذج المناسب تلقائياً
+                # اختيار نموذج مناسب
                 selected_model = None
                 for target in ["llama-3.3-70b", "llama-3.1-8b", "llama3", "mixtral", "gemma"]:
                     match = [m for m in available_models if target in m]
