@@ -144,7 +144,7 @@ if btn or q:
             all_chunks = read_all_chunks()
             corpus = "\n\n".join(all_chunks)
             
-            # اقتطاع النص المرجعي لمنع خطأ تجاوز السعة
+            # اقتطاع النص المرجعي لمنع تجاوز سعة النموذج
             truncated_corpus = corpus[:10000]
             
             prompt = f"""أنت مساعد آلي لوحدة شؤون الطلبة في كليات الرؤية بالرياض.
@@ -157,28 +157,35 @@ if btn or q:
 
 الإجابة: بناءً على اللوائح المرفقة فقط، أجب على سؤال الطالب بدقة ووضوح وبأسلوب مهذب ومباشر باللغة العربية. إذا لم تجد الإجابة في النص المرجعي، أخبر الطالب بلباقة أن يراجع وحدة شؤون الطلبة مباشرة."""
 
-            # النماذج الرسمية النشطة حالياً في Groq
-            active_models = [
-                "llama-3.3-70b-versatile",
-                "llama-3.1-8b-instant"
-            ]
-            
             ans = ""
             last_err = ""
 
-            for model_name in active_models:
-                try:
-                    completion = client.chat.completions.create(
-                        model=model_name,
-                        messages=[{"role": "user", "content": prompt}],
-                        temperature=0.0,
-                    )
-                    if completion and completion.choices:
-                        ans = completion.choices[0].message.content.strip()
-                        break
-                except Exception as e:
-                    last_err = str(e)
-                    continue
+            try:
+                # استعلام ديناميكي لجلب النماذج المتاحة فعلياً في حسابك من Groq
+                models_list = client.models.list().data
+                
+                # استبعاد الصوتيات والنماذج الخاصة التي تتطلب موافقة شروط
+                valid_models = [
+                    m.id for m in models_list 
+                    if not any(x in m.id for x in ["whisper", "safetensors", "canopylabs", "guard", "vision"])
+                ]
+
+                # جلب النموذج المناسب والتجربة بالتوالي
+                for model_name in valid_models:
+                    try:
+                        completion = client.chat.completions.create(
+                            model=model_name,
+                            messages=[{"role": "user", "content": prompt}],
+                            temperature=0.0,
+                        )
+                        if completion and completion.choices:
+                            ans = completion.choices[0].message.content.strip()
+                            break
+                    except Exception as ex:
+                        last_err = str(ex)
+                        continue
+            except Exception as e:
+                last_err = str(e)
 
             if not ans:
                 ans = f"عذراً، تعذر الاتصال بالذكاء الاصطناعي: {last_err}"
