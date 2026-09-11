@@ -9,7 +9,7 @@ from groq import Groq
 # 1. إعداد الصفحة
 st.set_page_config(page_title="استفسار شؤون الطلبة - كليات الرؤية", page_icon="🎓", layout="centered")
 
-# 2. حقن CSS لدعم اتجاه RTL وخط تجوال والألوان والزر وتنسيق التنويه
+# 2. حقن CSS لدعم اتجاه RTL والأنماط الرسمية
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap');
@@ -25,13 +25,11 @@ st.markdown("""
         text-align: right !important;
     }
     
-    /* محاذاة العناوين والنصوص */
     h1, h2, h3, h4, .stMarkdown p {
         text-align: right !important;
         direction: rtl !important;
     }
     
-    /* تنسيق الحقول والأزرار */
     .stTextInput input {
         text-align: right !important;
         direction: rtl !important;
@@ -52,7 +50,6 @@ st.markdown("""
         color: white !important;
     }
     
-    /* تنسيق صندوق الإجابة */
     .answer-box {
         background-color: #f4f4f6;
         border-right: 5px solid #8C7355;
@@ -65,7 +62,6 @@ st.markdown("""
         line-height: 1.7;
     }
     
-    /* تنسيق التنويه السفلي */
     .disclaimer-box {
         margin-top: 40px;
         padding-top: 15px;
@@ -78,7 +74,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 3. عرض الشعار والعناوين
+# 3. الشعار والعناوين
 st.image("Logo.png", width=160)
 st.title("كليات الرؤية - Vision Colleges")
 st.subheader("الاستفسار الآلي - وحدة شؤون الطلبة")
@@ -88,7 +84,7 @@ st.write("مرحباً بكم في كلية الرؤية بالرياض، نرح
 api_key = os.environ.get("GROQ_API_KEY")
 client = Groq(api_key=api_key) if api_key else None
 
-# 5. دالة قراءة الملفات مع التخزين المؤقت لتسريع الأداء
+# 5. قراءة الملفات بالتخزين المؤقت
 @st.cache_data(ttl=3600)
 def read_all_chunks():
     chunks = []
@@ -96,8 +92,6 @@ def read_all_chunks():
     
     for file in os.listdir(folder_path):
         file_path = os.path.join(folder_path, file)
-        
-        # قراءة PDF
         if file.endswith(".pdf"):
             try:
                 with pdfplumber.open(file_path) as pdf:
@@ -114,8 +108,6 @@ def read_all_chunks():
                             chunks.append(f"--- المصدر: {file} (صفحة {i+1}) ---\n{text}")
                 except Exception:
                     pass
-                    
-        # قراءة Word
         elif file.endswith(".docx"):
             try:
                 doc = Document(file_path)
@@ -124,8 +116,6 @@ def read_all_chunks():
                     chunks.append(f"--- المصدر: {file} ---\n" + "\n".join(full_text))
             except Exception:
                 pass
-                
-        # قراءة Excel
         elif file.endswith(".xlsx") or file.endswith(".xls"):
             try:
                 excel_file = pd.ExcelFile(file_path)
@@ -139,7 +129,7 @@ def read_all_chunks():
                 
     return chunks
 
-# 6. واجهة المدخلات
+# 6. المدخلات ومعالجة الاستفسار
 q = st.text_input("أدخل استفسارك هنا:", placeholder="ما هي المدة المسموح بها لتقديم عذر الوفاة؟")
 
 btn = st.button("للرد على استفسارك اضغط هنا")
@@ -148,7 +138,7 @@ if btn or q:
     if not q.strip():
         st.warning("يرجى كتابة السؤال أولاً.")
     elif not client:
-        st.error("مفتاح GROQ_API_KEY غير معرف في بيئة العمل (Render Environment Variables).")
+        st.error("مفتاح GROQ_API_KEY غير معرف في بيئة العمل.")
     else:
         with st.spinner("جاري جلب الإجابة..."):
             all_chunks = read_all_chunks()
@@ -164,29 +154,34 @@ if btn or q:
 
 الإجابة: بناءً على اللوائح المرفقة فقط، أجب على سؤال الطالب بدقة ووضوح وبأسلوب مهذب ومباشر باللغة العربية. إذا لم تجد الإجابة في النص المرجعي، أخبر الطالب بلباقة أن يراجع وحدة شؤون الطلبة مباشرة."""
 
-            # النموذج الأساسي المستقر
+            # جلب النماذج المتاحة ديناميكياً لتفادي خطأ 404 نهائياً
+            ans = ""
             try:
+                available_models = [m.id for m in client.models.list().data if "whisper" not in m.id and "safetensors" not in m.id]
+                
+                # جلب النموذج المناسب تلقائياً
+                selected_model = None
+                for target in ["llama-3.3-70b", "llama-3.1-8b", "llama3", "mixtral", "gemma"]:
+                    match = [m for m in available_models if target in m]
+                    if match:
+                        selected_model = match[0]
+                        break
+                
+                if not selected_model and available_models:
+                    selected_model = available_models[0]
+                
                 completion = client.chat.completions.create(
-                    model="llama-3.1-8b-instant",
+                    model=selected_model,
                     messages=[{"role": "user", "content": prompt}],
                     temperature=0.0,
                 )
                 ans = completion.choices[0].message.content.strip()
-            except Exception:
-                # نموذج احتياطي نشط في حال وجود ضغط على الأول
-                try:
-                    completion = client.chat.completions.create(
-                        model="llama-3.3-70b-versatile",
-                        messages=[{"role": "user", "content": prompt}],
-                        temperature=0.0,
-                    )
-                    ans = completion.choices[0].message.content.strip()
-                except Exception as e:
-                    ans = f"خطأ في الاتصال بالذكاء الاصطناعي: {str(e)}"
+            except Exception as e:
+                ans = f"خطأ في الاتصال بالذكاء الاصطناعي: {str(e)}"
 
             st.markdown(f"<div class='answer-box'>{ans}</div>", unsafe_allow_html=True)
 
-# 7. التنويه السفلي بالرابط
+# 7. التنويه السفلي
 st.markdown("""
 <div class='disclaimer-box'>
 تنبيـه: هذا برنامج رد آلي ويمكن أن تكون الإجابات في بعض الأحيان غير دقيقة، وعليه تعتبر اللوائح والأنظمة الرسمية المستمدة والمعلنة عبر الرابط التالي هي المرجع المعتمد والأخير للكلية:<br>
