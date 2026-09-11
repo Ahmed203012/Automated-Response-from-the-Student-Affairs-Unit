@@ -144,7 +144,7 @@ if btn or q:
             all_chunks = read_all_chunks()
             corpus = "\n\n".join(all_chunks)
             
-            # اقتطاع النص المرجعي لتفادي تجاوز سعة النموذج
+            # اقتطاع النص المرجعي لمنع خطأ تجاوز السعة
             truncated_corpus = corpus[:10000]
             
             prompt = f"""أنت مساعد آلي لوحدة شؤون الطلبة في كليات الرؤية بالرياض.
@@ -157,22 +157,19 @@ if btn or q:
 
 الإجابة: بناءً على اللوائح المرفقة فقط، أجب على سؤال الطالب بدقة ووضوح وبأسلوب مهذب ومباشر باللغة العربية. إذا لم تجد الإجابة في النص المرجعي، أخبر الطالب بلباقة أن يراجع وحدة شؤون الطلبة مباشرة."""
 
-            # قائمة بالنماذج المعتمدة والرسمية المتاحة للجميع مجاناً ودون شروط خاصة
-            target_models = [
-                "llama-3.1-8b-instant",
-                "llama3-8b-8192",
-                "llama3-70b-8192",
-                "mixtral-8x7b-32768"
+            # النماذج الرسمية النشطة حالياً في Groq
+            active_models = [
+                "llama-3.3-70b-versatile",
+                "llama-3.1-8b-instant"
             ]
             
             ans = ""
-            completion = None
             last_err = ""
 
-            for m in target_models:
+            for model_name in active_models:
                 try:
                     completion = client.chat.completions.create(
-                        model=m,
+                        model=model_name,
                         messages=[{"role": "user", "content": prompt}],
                         temperature=0.0,
                     )
@@ -184,7 +181,7 @@ if btn or q:
                     continue
 
             if not ans:
-                ans = f"عذراً، تعذر الاتصال بنموذج الذكاء الاصطناعي: {last_err}"
+                ans = f"عذراً، تعذر الاتصال بالذكاء الاصطناعي: {last_err}"
 
             st.markdown(f"<div class='answer-box'>{ans}</div>", unsafe_allow_html=True)
 
