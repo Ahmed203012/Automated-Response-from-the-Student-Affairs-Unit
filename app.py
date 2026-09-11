@@ -79,7 +79,7 @@ api_key = os.environ.get("GROQ_API_KEY")
 client = Groq(api_key=api_key) if api_key else None
 
 
-# 4. دالة متطورة لقراءة الإكسيل والـ PDF والـ Word
+# 4. دالة قراءة جميع الملفات (PDF, Word, Excel)
 @st.cache_data(ttl=3600)
 def read_all_chunks():
     chunks = []
@@ -120,7 +120,7 @@ def read_all_chunks():
             except Exception:
                 pass
 
-        # قراءة ملفات Excel وتحويل كل صف لنص مقروء صراحة
+        # قراءة ملفات Excel وتحويل كل صف إلى نص مقروء صراحة لتفادي اختصار الإيميلات
         elif file.endswith(".xlsx") or file.endswith(".xls"):
             try:
                 excel_file = pd.ExcelFile(file_path)
@@ -148,13 +148,13 @@ def read_all_chunks():
                                 "text": full_sheet_text,
                             }
                         )
-            except Exception as e:
+            except Exception:
                 pass
 
     return chunks
 
 
-# 5. دالة تصفية واختيار النصوص المناسبة
+# 5. دالة اختيار النصوص الأكثر ملاءمة للاستفسار
 def get_relevant_context(query, chunks, max_chars=12000):
     query_words = [
         w.strip().lower() for w in query.split() if len(w.strip()) > 1
@@ -166,9 +166,9 @@ def get_relevant_context(query, chunks, max_chars=12000):
         text_lower = item["text"].lower()
         for word in query_words:
             if word in text_lower:
-                score += 3  # إعطاء مطابقة الكلمات وزناً أسرع
+                score += 3
 
-        # إعطاء أولوية لملفات الإكسيل والإيميلات عند وجود كلمة إيميل أو بريد أو عضو
+        # منح أولوية لملفات الإكسيل عند الاستفسار عن الإيميلات أو الأسماء
         if any(
             k in query.lower()
             for k in ["إيميل", "ايميل", "بريد", "دكتور", "أستاذ", "استاذ", "من هو"]
@@ -191,7 +191,7 @@ def get_relevant_context(query, chunks, max_chars=12000):
     return selected_text
 
 
-# 6. المدخلات والاستعلام
+# 6. المدخلات واستجابة الزر
 q = st.text_input(
     "أدخل استفسارك هنا:",
     placeholder="ما هي المدة المسموح بها لتقديم عذر الوفاة؟",
@@ -225,9 +225,9 @@ if btn or q:
 
             ans = ""
             try:
-                # استخدام النموذج المستقر والسريع llama-3.1-8b-instant أو llama3-70b-8192
+                # استخدام النموذج المستقر llama3-8b-8192
                 completion = client.chat.completions.create(
-                    model="llama-3.1-8b-instant",
+                    model="llama3-8b-8192",
                     messages=[
                         {
                             "role": "system",
