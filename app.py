@@ -1,188 +1,237 @@
 import os
-import re
-import fitz  # PyMuPDF لقراءة ملفات الـ PDF المرفقة
 import streamlit as st
+import fitz  # PyMuPDF
+import pdfplumber
+from docx import Document
+import pandas as pd
 from groq import Groq
 
-# ==========================================
-# 1. إعدادات الصفحة والتصميم العنابي ودعم RTL
-# ==========================================
-st.set_page_config(
-    page_title="كليات الرؤية - وحدة شؤون الطلبة", page_icon="🎓", layout="centered"
-)
+# 1. إعداد الصفحة
+st.set_page_config(page_title="استفسار شؤون الطلبة - كليات الرؤية", page_icon="🎓", layout="centered")
 
-st.markdown(
-    """
+# 2. حقن CSS لدعم اتجاه RTL والتنسيق العربي
+st.markdown("""
     <style>
-    /* محاذاة الصفحة كاملة من اليمين إلى اليسار RTL */
-    html, body, [data-testid="stAppViewContainer"], .main {
+    @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap');
+    
+    html, body, [class*="css"], div, p, span, input, button {
+        font-family: 'Tajawal', sans-serif !important;
         direction: rtl !important;
         text-align: right !important;
     }
     
-    /* ضبط إدخال النصوص وحقول الإدخال */
-    input, textarea, div[data-baseweb="input"] {
+    .stApp {
         direction: rtl !important;
         text-align: right !important;
     }
-
-    /* تنسيق زر الإرسال العنابي المميز */
-    div.stButton > button {
-        width: 100%;
-        background-color: #8b1538 !important;
+    
+    h1, h2, h3, h4, .stMarkdown p {
+        text-align: right !important;
+        direction: rtl !important;
+    }
+    
+    .stTextInput input {
+        text-align: right !important;
+        direction: rtl !important;
+    }
+    
+    .stButton button {
+        width: 100% !important;
+        background-color: #8C7355 !important;
         color: white !important;
         font-weight: bold !important;
         border-radius: 8px !important;
-        padding: 12px !important;
-        font-size: 1rem !important;
+        padding: 10px !important;
         border: none !important;
     }
-    div.stButton > button:hover {
-        background-color: #6a102a !important;
+    
+    .stButton button:hover {
+        background-color: #6e5a42 !important;
         color: white !important;
     }
     
-    /* تنويه الأسفل Footer */
-    .footer-warning {
-        font-size: 0.85rem;
-        color: #555;
-        border-top: 1px solid #ddd;
-        padding-top: 12px;
-        margin-top: 35px;
-        text-align: center !important;
-        direction: rtl;
+    .answer-box {
+        background-color: #f4f4f6;
+        border-right: 5px solid #8C7355;
+        padding: 18px;
+        border-radius: 8px;
+        margin-top: 15px;
+        direction: rtl !important;
+        text-align: right !important;
+        font-size: 16px;
+        line-height: 1.7;
     }
     
-    /* إخفاء القوائم غير الضرورية لتنظيف الواجهة */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
+    .disclaimer-box {
+        margin-top: 40px;
+        padding-top: 15px;
+        border-top: 1px solid #e0e0e0;
+        font-size: 13px;
+        color: #666666;
+        text-align: right !important;
+        direction: rtl !important;
+    }
     </style>
-""",
-    unsafe_allow_html=True,
-)
+""", unsafe_allow_html=True)
 
-
-# ==========================================
-# 2. دالة لقراءة ملفات الـ PDF المرفقة في المجلد
-# ==========================================
-@st.cache_data
-def load_context_from_pdfs():
-    pdf_text = ""
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-
-    for file in os.listdir(current_dir):
-        if file.endswith(".pdf"):
-            pdf_path = os.path.join(current_dir, file)
-            try:
-                doc = fitz.open(pdf_path)
-                pdf_text += f"\n\n--- محتوى ملف: {file} ---\n"
-                for page in doc:
-                    pdf_text += page.get_text()
-            except Exception as e:
-                pass
-
-    return pdf_text
-
-
-PDF_KNOWLEDGE_BASE = load_context_from_pdfs()
-
-# ==========================================
-# 3. عرض الشعار ورأس الصفحة
-# ==========================================
-if os.path.exists("logo.png"):
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        st.image("logo.png", use_container_width=True)
-
+# 3. الشعار والعناوين
+st.image("Logo.png", width=160)
 st.title("كليات الرؤية - Vision Colleges")
 st.subheader("الاستفسار الآلي - وحدة شؤون الطلبة")
-st.caption(
-    "مرحباً بكم في كلية الرؤية بالرياض. نرحب باستفساراتكم حول لوائح وأنظمة الكلية."
-)
+st.write("مرحباً بكم في كلية الرؤية بالرياض، نرحب باستفساراتكم حول لوائح وأنظمة الكلية.")
 
-# ==========================================
-# 4. حقل إدخال السؤال
-# ==========================================
-user_query = st.text_input(
-    "أدخل استفسارك هنا:", placeholder="ما هو الزي الرسمي للطلاب؟"
-)
+# 4. إعداد Groq Client
+api_key = os.environ.get("GROQ_API_KEY")
+client = Groq(api_key=api_key) if api_key else None
 
-submit_btn = st.button("للرد على استفسارك اضغط هنا")
+# 5. قراءة واستخراج النصوص على مستوى المقاطع (Chunks)
+@st.cache_data(ttl=3600)
+def read_all_chunks():
+    chunks = []
+    folder_path = "."
+    
+    for file in os.listdir(folder_path):
+        file_path = os.path.join(folder_path, file)
+        
+        # قراءة ملفات PDF
+        if file.endswith(".pdf"):
+            try:
+                with pdfplumber.open(file_path) as pdf:
+                    for i, page in enumerate(pdf.pages):
+                        text = page.extract_text()
+                        if text and len(text.strip()) > 10:
+                            chunks.append({"source": f"{file} (صفحة {i+1})", "text": text})
+            except Exception:
+                try:
+                    doc = fitz.open(file_path)
+                    for i, page in enumerate(doc):
+                        text = page.get_text()
+                        if text and len(text.strip()) > 10:
+                            chunks.append({"source": f"{file} (صفحة {i+1})", "text": text})
+                except Exception:
+                    pass
+                    
+        # قراءة ملفات Word
+        elif file.endswith(".docx"):
+            try:
+                doc = Document(file_path)
+                full_text = [p.text for p in doc.paragraphs if p.text.strip()]
+                if full_text:
+                    chunks.append({"source": file, "text": "\n".join(full_text)})
+            except Exception:
+                pass
+                
+        # قراءة ملفات Excel
+        elif file.endswith(".xlsx") or file.endswith(".xls"):
+            try:
+                excel_file = pd.ExcelFile(file_path)
+                for sheet_name in excel_file.sheet_names:
+                    df = pd.read_excel(file_path, sheet_name=sheet_name)
+                    text = df.to_string()
+                    if text:
+                        chunks.append({"source": f"{file} (ورقة: {sheet_name})", "text": text})
+            except Exception:
+                pass
+                
+    return chunks
 
-# ==========================================
-# 5. تعليمات النظام ونصوص المرجع لـ Groq
-# ==========================================
-SYSTEM_INSTRUCTIONS = f"""
-Role: Official AI assistant for Student Affairs at Vision Colleges in Riyadh.
+# 6. دالة تصفية المقاطع بناءً على سؤال الطالب (Smart Retrieval)
+def get_relevant_context(query, chunks, max_chars=8000):
+    query_words = [w.strip().lower() for w in query.split() if len(w.strip()) > 2]
+    
+    scored_chunks = []
+    for item in chunks:
+        score = 0
+        text_lower = item["text"].lower()
+        for word in query_words:
+            if word in text_lower:
+                score += 1
+        scored_chunks.append((score, item))
+    
+    # ترتيب المقاطع حسب الأكثر مطابقة
+    scored_chunks.sort(key=lambda x: x[0], reverse=True)
+    
+    selected_text = ""
+    for score, item in scored_chunks:
+        # إذا لم نجد تطابق للكلمات، نأخذ المقاطع الأولى احتياطاً
+        chunk_entry = f"--- المصدر: {item['source']} ---\n{item['text']}\n\n"
+        if len(selected_text) + len(chunk_entry) <= max_chars:
+            selected_text += chunk_entry
+        else:
+            break
+            
+    return selected_text if selected_text else "".join([f"--- المصدر: {c['source']} ---\n{c['text']}\n\n" for c in chunks])[:max_chars]
 
-CRITICAL DIRECTIVES:
-1. Do NOT output any internal monologue, reasoning, chain-of-thought, or thinking process.
-2. Output ONLY the direct final answer in Arabic intended for the user.
-3. Answer user questions directly based on the provided Reference Data below.
+# 7. المدخلات ومعالجة الاستفسار
+q = st.text_input("أدخل استفسارك هنا:", placeholder="ما هي المدة المسموح بها لتقديم عذر الوفاة؟")
 
-=================== REFERENCE DATA / النص المرجعي المعتمد ===================
-{PDF_KNOWLEDGE_BASE}
-============================================================================
-"""
+btn = st.button("للرد على استفسارك اضغط هنا")
 
-
-def clean_response(text: str) -> str:
-    if not text:
-        return ""
-    cleaned = re.sub(
-        r"(<think>.*?</think>|Here's a thinking process.*?\n\n)",
-        "",
-        text,
-        flags=re.DOTALL | re.IGNORECASE,
-    )
-    return cleaned.strip()
-
-
-# ==========================================
-# 6. معالجة الإرسال عبر Groq API
-# ==========================================
-if submit_btn:
-    if not user_query.strip():
-        st.warning("يرجى كتابة الاستفسار أولاً.")
+if btn or q:
+    if not q.strip():
+        st.warning("يرجى كتابة السؤال أولاً.")
+    elif not client:
+        st.error("مفتاح GROQ_API_KEY غير معرف في بيئة العمل.")
     else:
         with st.spinner("جاري البحث في اللوائح والأنظمة..."):
+            all_chunks = read_all_chunks()
+            
+            # جلب النظائر الأكثر ارتباطاً بسؤال الطالب
+            relevant_context = get_relevant_context(q, all_chunks)
+            
+            prompt = f"""أنت مساعد آلي رسمي لوحدة شؤون الطلبة في كليات الرؤية بالرياض.
+
+التعليمات الصارمة:
+1. قدم الإجابة النهائية المباشرة باللغة العربية فقط.
+2. يمنع منعاً باتاً كتابة أفكارك أو خطوات البحث باللغة الإنجليزية.
+3. استخرج الإجابة بناءً على النص المرجعي المرفق بأسلوب مهذب ومباشر.
+4. إذا لم تجد الإجابة صراحة في النص، وجّه الطالب بلباقة لمراجعة وحدة شؤون الطلبة.
+
+النص المرجعي المستخرج:
+{relevant_context}
+
+سؤال الطالب: {q}
+
+الإجابة النهائية (بالعربية فقط):"""
+
+            ans = ""
+            last_err = ""
+
             try:
-                api_key = os.environ.get("GROQ_API_KEY", "")
+                models_list = client.models.list().data
+                valid_models = [
+                    m.id for m in models_list 
+                    if not any(x in m.id for x in ["whisper", "safetensors", "canopylabs", "guard", "vision"])
+                ]
 
-                if not api_key:
-                    st.error(
-                        "لم يتم العثور على مفتاح GROQ_API_KEY في إعدادات Render."
-                    )
-                else:
-                    client = Groq(api_key=api_key)
-
-                    # استخدام النموذج المستقر llama3-70b-8192
-                    response = client.chat.completions.create(
-                        model="llama3-70b-8192",
-                        messages=[
-                            {"role": "system", "content": SYSTEM_INSTRUCTIONS},
-                            {"role": "user", "content": user_query},
-                        ],
-                        temperature=0.2,
-                    )
-
-                    raw_answer = response.choices[0].message.content
-                    final_answer = clean_response(raw_answer)
-
-                    st.success(final_answer)
-
+                for model_name in valid_models:
+                    try:
+                        completion = client.chat.completions.create(
+                            model=model_name,
+                            messages=[
+                                {"role": "system", "content": "أنت مساعد آلي تجيب باللغة العربية المباشرة فقط دون تفكير بالإنجليزية."},
+                                {"role": "user", "content": prompt}
+                            ],
+                            temperature=0.1,
+                        )
+                        if completion and completion.choices:
+                            ans = completion.choices[0].message.content.strip()
+                            break
+                    except Exception as ex:
+                        last_err = str(ex)
+                        continue
             except Exception as e:
-                st.error(f"حدث خطأ أثناء معالجة الطلب: {str(e)}")
+                last_err = str(e)
 
-# ==========================================
-# 7. التنويه السفلي بالمرجع المعتمد
-# ==========================================
-st.markdown(
-    """
-    <div class="footer-warning">
-        تنبيه: هذا برنامج رد آلي ويمكن أن تكون الإجابات في بعض الأحيان غير دقيقة، وعليه تعتبر اللوائح والأنظمة الرسمية المستمدة والمعلنة عبر الرابط التالي هي المرجع المعتمد والأخير للكلية:<br>
-        <a href="https://elearning.vision.edu.sa/course/view.php?id=788" target="_blank">https://elearning.vision.edu.sa/course/view.php?id=788</a>
-    </div>
-""",
-    unsafe_allow_html=True,
-)
+            if not ans:
+                ans = f"عذراً، تعذر الاتصال بالذكاء الاصطناعي: {last_err}"
+
+            st.markdown(f"<div class='answer-box'>{ans}</div>", unsafe_allow_html=True)
+
+# 8. التنويه السفلي
+st.markdown("""
+<div class='disclaimer-box'>
+تنبيـه: هذا برنامج رد آلي ويمكن أن تكون الإجابات في بعض الأحيان غير دقيقة، وعليه تعتبر اللوائح والأنظمة الرسمية المستمدة والمعلنة عبر الرابط التالي هي المرجع المعتمد والأخير للكلية:<br>
+<a href='https://elearning.vision.edu.sa/course/view.php?id=788' target='_blank'>https://elearning.vision.edu.sa/course/view.php?id=788</a>
+</div>
+""", unsafe_allow_html=True)
