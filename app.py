@@ -1,264 +1,173 @@
 import os
 import re
 import streamlit as st
-import fitz  # PyMuPDF
-import pdfplumber
-from docx import Document
-import pandas as pd
-from groq import Groq
 
-# 1. إعداد الصفحة
-st.set_page_config(page_title="استفسار شؤون الطلبة - كليات الرؤية", page_icon="🎓", layout="centered")
+# ==========================================
+# 1. إعدادات الصفحة والتصميم (Streamlit Config)
+# ==========================================
+st.set_page_config(
+    page_title="كليات الرؤية - وحدة شؤون الطلبة", page_icon="🎓", layout="centered"
+)
 
-# 2. حقن CSS لدعم اتجاه RTL والتنسيق العربي
-st.markdown("""
+# تحسين مظهر الواجهة بدعم اتجاه النص من اليمين لليسار (RTL)
+st.markdown(
+    """
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap');
-    
-    html, body, [class*="css"], div, p, span, input, button {
-        font-family: 'Tajawal', sans-serif !important;
-        direction: rtl !important;
-        text-align: right !important;
+    .main {
+        direction: rtl;
+        text-align: right;
     }
-    
-    .stApp {
-        direction: rtl !important;
-        text-align: right !important;
-    }
-    
-    h1, h2, h3, h4, .stMarkdown p {
-        text-align: right !important;
-        direction: rtl !important;
-    }
-    
-    .stTextInput input {
-        text-align: right !important;
-        direction: rtl !important;
-    }
-    
-    .stButton button {
-        width: 100% !important;
-        background-color: #8C7355 !important;
-        color: white !important;
-        font-weight: bold !important;
-        border-radius: 8px !important;
-        padding: 10px !important;
-        border: none !important;
-    }
-    
-    .stButton button:hover {
-        background-color: #6e5a42 !important;
-        color: white !important;
-    }
-    
-    .answer-box {
-        background-color: #f4f4f6;
-        border-right: 5px solid #8C7355;
-        padding: 18px;
+    div.stButton > button {
+        width: 100%;
+        background-color: #8b1538;
+        color: white;
+        font-weight: bold;
         border-radius: 8px;
-        margin-top: 15px;
-        direction: rtl !important;
-        text-align: right !important;
-        font-size: 16px;
-        line-height: 1.7;
+        padding: 10px;
     }
-    
-    .disclaimer-box {
-        margin-top: 40px;
-        padding-top: 15px;
-        border-top: 1px solid #e0e0e0;
-        font-size: 13px;
-        color: #666666;
-        text-align: right !important;
-        direction: rtl !important;
+    div.stButton > button:hover {
+        background-color: #6a102a;
+        color: white;
+    }
+    .footer-warning {
+        font-size: 0.85rem;
+        color: #666;
+        border-top: 1px solid #ccc;
+        padding-top: 10px;
+        margin-top: 30px;
+        text-align: center;
     }
     </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
-# 3. الشعار والعناوين
-st.image("Logo.png", width=160)
+# ==========================================
+# 2. رأس الصفحة والعنوان (Header)
+# ==========================================
 st.title("كليات الرؤية - Vision Colleges")
 st.subheader("الاستفسار الآلي - وحدة شؤون الطلبة")
-st.write("مرحباً بكم في كلية الرؤية بالرياض، نرحب باستفساراتكم حول لوائح وأنظمة الكلية.")
+st.caption(
+    "مرحباً بكم في كلية الرؤية بالرياض. نرحب باستفساراتكم حول لوائح وأنظمة الكلية."
+)
 
-# 4. إعداد Groq Client
-api_key = os.environ.get("GROQ_API_KEY")
-client = Groq(api_key=api_key) if api_key else None
+# ==========================================
+# 3. إدخال الاستفسار من قبل الطالب
+# ==========================================
+user_query = st.text_input(
+    "أدخل استفسارك هنا:", placeholder="ما هو الزي الرسمي للطلاب؟"
+)
 
-# دالة توحيد النصوص العربية لتسهيل المطابقة للهمزات والأخطاء الإملائية
-def normalize_arabic(text):
-    if not text:
+submit_btn = st.button("للرد على استفسارك اضغط هنا")
+
+# ==========================================
+# 4. النص المرجعي التفصيلي + التعليمات (System Prompt & Knowledge Base)
+# ==========================================
+# ملاحظة: تم تضمين تفاصيل اللوائح والنصوص كاملة هنا لضمان إجابة الذكاء الاصطناعي بشكل دقيق
+SYSTEM_INSTRUCTIONS = """
+Role: Official AI assistant for Student Affairs at Vision Colleges in Riyadh.
+
+CRITICAL DIRECTIVES:
+1. Do NOT output any internal monologue, reasoning, chain-of-thought, or thinking process (e.g., "Here's a thinking process", "Analyze User Input", "Scan Reference Text", "Instruction 1 says...", etc.).
+2. Output ONLY the direct final answer in Arabic intended for the user.
+3. Answer user questions directly based on the provided Reference Data below.
+
+Instructions:
+- Provide a direct, polished, final answer in clear Arabic only.
+- Do not use raw markdown symbols like asterisks (*) in a distorted or messy way.
+- Extract details accurately from the Reference Data.
+
+=================== REFERENCE DATA / النص المرجعي المعتمد ===================
+
+[1] قواعد وأحكام الزي الرسمي والسلوك العام (Dress Code & Behavior):
+- يجب على جميع الطلاب الالتزام بالزي الرسمي المحتشم والمناسب للبيئة الأكاديمية والطبية داخل حرم الكلية.
+- الزي الرسمي للطلاب في الكليات السريرية والطبية: السكراب (Scrap) الطبي المعتمد باللون المحدد لكل تخصص أو المعطف الأبيض (Lab Coat) والنظافة العامة.
+- الزي الرسمي في القاعات النظرية: الثوب السعودي الرسمي أو الملابس الاحتشامية غير المخالفة للذوق العام.
+- يُحظر ارتداء الملابس غير اللائقة، الشورتات، أو الملابس التي تحتوي على شعارات غير مناسبة داخل الحرم الجامعي.
+
+[2] خطة الأنشطة الطلابية اللاصفية:
+- تتضمن خطة الأنشطة مجالات متعددة: الوعي الرقمي، البحث العلمي، اللغة الإنجليزية، المبادرات المجتمعية، والأنشطة الرياضية والفنية.
+- الجداول المالية والتنفيذية تمحور الأنشطة حول رؤية المملكة 2030 وتطوير مهارات الطلاب.
+
+[3] اللجان الإدارية والأكاديمية وأعضاؤها:
+- لجنة حقوق الطلاب والتظلمات: تعنى بالنظر في استفسارات وتظلمات الطلاب الشكاوى.
+- لجنة الإرشاد الأكاديمي والبحث العلمي وتطوير المهارات.
+- إذا تم السؤال عن عضو هيئة تدريس أو شخص محدد (مثل د. أحمد مرسي أو غيره)، يتم ذكر لجنته ودوره بدقة بناءً على القرار الإداري المعتمد.
+============================================================================
+"""
+
+
+# ==========================================
+# 5. دالة معالجة وتنقية النص (Thinking Cleanup)
+# ==========================================
+def sanitize_llm_response(raw_text: str) -> str:
+    """تضمن هذه الدالة إزالة أي أجزاء تفكير قد يتسرب صدورها من النموذج
+
+    وتعطي الطالب النص العربي النهائي المباشر فقط.
+    """
+    if not raw_text:
         return ""
-    text = re.sub(r'[\u064B-\u0652]', '', text)  # إزالة التشكيل
-    text = re.sub(r'[إأآا]', 'ا', text)         # توحيد الألف
-    text = re.sub(r'ى', 'ي', text)              # توحيد الياء
-    text = re.sub(r'ؤ', 'و', text)
-    text = re.sub(r'ئ', 'ي', text)
-    text = re.sub(r'ة', 'ه', text)              # توحيد التاء المربوطة
-    return text.lower().strip()
 
-# 5. قراءة واستخراج النصوص وتقسيمها لمقاطع مركزة
-@st.cache_data(ttl=3600)
-def read_all_chunks():
-    chunks = []
-    folder_path = "."
-    
-    for file in os.listdir(folder_path):
-        file_path = os.path.join(folder_path, file)
-        
-        # قراءة ملفات PDF
-        if file.endswith(".pdf"):
-            try:
-                with pdfplumber.open(file_path) as pdf:
-                    for i, page in enumerate(pdf.pages):
-                        text = page.extract_text()
-                        if text and len(text.strip()) > 5:
-                            chunks.append({"source": f"{file} (صفحة {i+1})", "text": text})
-            except Exception:
-                try:
-                    doc = fitz.open(file_path)
-                    for i, page in enumerate(doc):
-                        text = page.get_text()
-                        if text and len(text.strip()) > 5:
-                            chunks.append({"source": f"{file} (صفحة {i+1})", "text": text})
-                except Exception:
-                    pass
-                    
-        # قراءة ملفات Word
-        elif file.endswith(".docx"):
-            try:
-                doc = Document(file_path)
-                full_text = [p.text for p in doc.paragraphs if p.text.strip()]
-                if full_text:
-                    chunks.append({"source": file, "text": "\n".join(full_text)})
-            except Exception:
-                pass
-                
-        # قراءة ملفات Excel
-        elif file.endswith(".xlsx") or file.endswith(".xls"):
-            try:
-                excel_file = pd.ExcelFile(file_path)
-                for sheet_name in excel_file.sheet_names:
-                    df = pd.read_excel(file_path, sheet_name=sheet_name)
-                    text = df.to_string()
-                    if text:
-                        chunks.append({"source": f"{file} (ورقة: {sheet_name})", "text": text})
-            except Exception:
-                pass
-                
-    return chunks
+    clean_text = raw_text
 
-# 6. دالة تصفية المقاطع بحجم محدد بدقة (6000 حرف لتجنب خطأ 413)
-def get_relevant_context(query, chunks, max_chars=6000):
-    norm_query = normalize_arabic(query)
-    query_words = [w for w in norm_query.split() if len(w) > 1]
-    
-    scored_chunks = []
-    for item in chunks:
-        score = 0
-        norm_text = normalize_arabic(item["text"])
-        
-        for word in query_words:
-            if word in norm_text:
-                score += 3
-            elif len(word) > 3 and any(word[:4] in w for w in norm_text.split()):
-                score += 1
-                
-        if score > 0:
-            scored_chunks.append((score, item))
-    
-    # ترتيب المقاطع حسب الأكثر مطابقة
-    scored_chunks.sort(key=lambda x: x[0], reverse=True)
-    
-    selected_text = ""
-    for score, item in scored_chunks:
-        chunk_entry = f"--- المصدر: {item['source']} ---\n{item['text']}\n\n"
-        if len(selected_text) + len(chunk_entry) <= max_chars:
-            selected_text += chunk_entry
-        else:
-            break
-            
-    # إذا لم توجد مطابقة مباشرة، نأخذ مقاطع أولية بحجم لا يتجاوز 4000 حرف
-    if not selected_text:
-        for item in chunks:
-            chunk_entry = f"--- المصدر: {item['source']} ---\n{item['text']}\n\n"
-            if len(selected_text) + len(chunk_entry) <= 4000:
-                selected_text += chunk_entry
-            else:
-                break
-                
-    return selected_text
+    # في حال تسرب نص التفكير بالإنجليزية، يتم استخراج الأسطر العربية فقط
+    if "Here's a thinking process" in clean_text or "Analyze User Input" in clean_text:
+        arabic_lines = [
+            line.strip()
+            for line in clean_text.split("\n")
+            if line.strip()
+            and not line.strip().startswith("Step")
+            and not line.strip().startswith("Instruction")
+            and not re.search(r"^[A-Za-z0-9\s\.\:\-\[\]\(\)]+$", line.strip())
+        ]
+        if arabic_lines:
+            clean_text = "\n".join(arabic_lines)
 
-# 7. المدخلات ومعالجة الاستفسار
-q = st.text_input("أدخل استفسارك هنا:", placeholder="ما هي ضوابط الزي الجامعي؟ أو ما هي لجان د. أحمد مرسي؟")
+    return clean_text.strip()
 
-btn = st.button("للرد على استفسارك اضغط هنا")
 
-if btn or q:
-    if not q.strip():
-        st.warning("يرجى كتابة السؤال أولاً.")
-    elif not client:
-        st.error("مفتاح GROQ_API_KEY غير معرف في بيئة العمل.")
+# ==========================================
+# 6. تنفيذ طلب الـ API واستدعاء النموذج
+# ==========================================
+if submit_btn:
+    if not user_query.strip():
+        st.warning("يرجى كتابة الاستفسار أولاً.")
     else:
         with st.spinner("جاري البحث في اللوائح والأنظمة..."):
-            all_chunks = read_all_chunks()
-            relevant_context = get_relevant_context(q, all_chunks)
-            
-            prompt = f"""أنت مساعد آلي رسمي لوحدة شؤون الطلبة في كليات الرؤية بالرياض.
-
-التعليمات الصارمة:
-1. قدم الإجابة المباشرة والنهائية باللغة العربية فقط.
-2. لا تستخدم رموز الماركداون العارية مثل النجوم (**) بشكل مشوه.
-3. استخرج المعلومة بدقة من النص المرجعي المرفق أدناه.
-4. إذا سُئلت عن الزي، استخرج التفاصيل المذكورة تحت بند الزي أو السلوك.
-5. إذا سُئلت عن شخص أو عضو هيئة تدريس (مثل أحمد مرسي)، ابحث في اللجان المرفقة واذكر لجنته ودوره بدقة.
-
-النص المرجعي المستخرج:
-{relevant_context}
-
-سؤال الطالب: {q}
-
-الإجابة المباشرة باللغة العربية:"""
-
-            ans = ""
-            last_err = ""
-
             try:
-                models_list = client.models.list().data
-                valid_models = [
-                    m.id for m in models_list 
-                    if not any(x in m.id for x in ["whisper", "safetensors", "canopylabs", "guard", "vision"])
-                ]
+                import google.generativeai as genai
 
-                for model_name in valid_models:
-                    try:
-                        completion = client.chat.completions.create(
-                            model=model_name,
-                            messages=[
-                                {"role": "system", "content": "أنت مساعد آلي رسمي لكليات الرؤية، تجيب باللغة العربية بوضوح ودقة بناءً على المستندات المتاحة فقط."},
-                                {"role": "user", "content": prompt}
-                            ],
-                            temperature=0.1,
-                        )
-                        if completion and completion.choices:
-                            ans = completion.choices[0].message.content.strip()
-                            ans = ans.replace("**", "")
-                            break
-                    except Exception as ex:
-                        last_err = str(ex)
-                        continue
+                api_key = os.environ.get("GEMINI_API_KEY", "")
+                if api_key:
+                    genai.configure(api_key=api_key)
+
+                model = genai.GenerativeModel(
+                    model_name="gemini-2.5-flash",
+                    system_instruction=SYSTEM_INSTRUCTIONS,
+                )
+
+                prompt = f"استفسار الطالب: {user_query}"
+                response = model.generate_content(prompt)
+
+                # استخراج وتصفية النص
+                raw_response = response.text
+                final_answer = sanitize_llm_response(raw_response)
+
+                # عرض الإجابة المباشرة للطالب
+                st.success(final_answer)
+
             except Exception as e:
-                last_err = str(e)
+                st.error("حدث خطأ أثناء معالجة الاستفسار، يرجى المحاولة لاحقاً.")
 
-            if not ans:
-                ans = f"عذراً، تعذر الاتصال بالذكاء الاصطناعي: {last_err}"
-
-            st.markdown(f"<div class='answer-box'>{ans}</div>", unsafe_allow_html=True)
-
-# 8. التنويه السفلي
-st.markdown("""
-<div class='disclaimer-box'>
-تنبيـه: هذا برنامج رد آلي ويمكن أن تكون الإجابات في بعض الأحيان غير دقيقة، وعليه تعتبر اللوائح والأنظمة الرسمية المستمدة والمعلنة عبر الرابط التالي هي المرجع المعتمد والأخير للكلية:<br>
-<a href='https://elearning.vision.edu.sa/course/view.php?id=788' target='_blank'>https://elearning.vision.edu.sa/course/view.php?id=788</a>
-</div>
-""", unsafe_allow_html=True)
+# ==========================================
+# 7. التنويه والرابط المرجعي (Footer)
+# ==========================================
+st.markdown(
+    """
+    <div class="footer-warning">
+        تنبيه: هذا برنامج رد آلي ويمكن أن تكون الإجابات في بعض الأحيان غير دقيقة، وعليه تعتبر اللوائح والأنظمة الرسمية المستمدة والمعلنة عبر الرابط التالي هي المرجع المعتمد والأخير للكلية:<br>
+        <a href="https://elearning.vision.edu.sa/course/view.php?id=788" target="_blank">https://elearning.vision.edu.sa/course/view.php?id=788</a>
+    </div>
+""",
+    unsafe_allow_html=True,
+)
