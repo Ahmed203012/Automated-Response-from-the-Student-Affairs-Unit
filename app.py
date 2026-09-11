@@ -247,7 +247,7 @@ def read_all_chunks():
                         for para in re.split(r"\n\s*\n", text):
                             para = para.strip()
                             if len(para) > 5:
-                                chunks.append((f, para))
+                                chunks.append((f, text))
                 except Exception as fallback_err:
                     warnings.append(f"{f}: فشل الاحتياطي أيضاً — {fallback_err}")
         elif low.endswith((".xlsx", ".xls", ".csv")):
@@ -352,7 +352,6 @@ if btn and q:
         try:
             from groq import Groq
             
-            # جلب المفتاح مع تنظيفه التلقائي من أي مسافات أو أسطر جديدة
             raw_key = os.getenv("GROQ_API_KEY", "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")
             api_key = raw_key.strip().replace("\n", "").replace("\r", "")
 
@@ -371,8 +370,9 @@ if btn and q:
 السؤال: {q}
 الإجابة:"""
 
+            # تم تحديث النموذج إلى llama-3.3-70b-versatile المعتمد
             completion = client.chat.completions.create(
-                model="llama-3.1-70b-versatile",
+                model="llama-3.3-70b-versatile",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.0,
             )
