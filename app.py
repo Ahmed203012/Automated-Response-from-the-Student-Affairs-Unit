@@ -143,23 +143,23 @@ body { background: #fafaf9; margin:0; padding:0; direction: rtl; text-align: rig
 .loader { text-align:center; padding:20px; display:none; color:#8C7355; font-weight:bold; }
 /* تنسيق مستطيل التنبيه الجديد */
 .disclaimer-box { 
-    background-color: #8C7355; 
-    color: #ffffff; 
-    padding: 20px; 
+    background-color: #f4f4f6; 
+    color: #222; 
+    padding: 15px; 
     border-radius: 10px; 
     margin-top: 30px; 
-    font-size: 13px; 
-    line-height: 1.8; 
+    font-size: 12px; 
+    line-height: 1.6; 
     text-align: right;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    border-right: 5px solid #8C7355;
 }
 .disclaimer-box a { 
-    color: #ffffff; 
+    color: #8C7355; 
     text-decoration: underline; 
     font-weight: bold; 
 }
 .disclaimer-box a:hover { 
-    color: #f0f0f0; 
+    color: #6e5a42; 
     text-decoration: none; 
 }
 </style>
@@ -181,10 +181,12 @@ body { background: #fafaf9; margin:0; padding:0; direction: rtl; text-align: rig
 <div id="answer"></div>
 </div>
 
-<!-- مستطيل التنبيه الجديد -->
+<!-- مستطيل التنبيه الجديد بالنص المطلوب -->
 <div class="disclaimer-box">
-    <p style="margin: 0 0 10px 0;">تنبيه: هذا برنامج رد آلي، وربما تكون بعض الإجابات أو الردود غير دقيقة. اللوائح الرسمية المعلنة عبر الرابط التالي هي المرجع المعتمد:</p>
-    <p style="margin: 0;"><a href="https://elearning.vision.edu.sa/course/view.php?id=788" target="_blank">https://elearning.vision.edu.sa/course/view.php?id=788</a></p>
+    <p>هذا المساعد برنامج آلي يهدف إلى تقديم معلومات وإرشادات للطلاب، وقد لا تكون جميع إجاباته دقيقة أو محدثة بشكل كامل. لذلك، لا تُعد إجابات المساعد الآلي مرجعًا رسميًا أو ملزمًا للكلية.</p>
+    <p>ويُعد المرجع الرسمي والمعتمد لجميع اللوائح والأنظمة والتعليمات الأكاديمية هو ما يتم نشره عبر الرابط الرسمي للكلية أدناه:</p>
+    <p><a href="https://elearning.vision.edu.sa/course/view.php?id=788" target="_blank">https://elearning.vision.edu.sa/course/view.php?id=788</a></p>
+    <p>وفي حال وجود أي تعارض بين إجابة المساعد وما هو منشور في الرابط الرسمي، يُعتد بما ورد في الرابط الرسمي للكلية.</p>
 </div>
 
 </div>
