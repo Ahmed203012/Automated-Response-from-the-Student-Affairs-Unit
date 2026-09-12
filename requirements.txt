@@ -1,7 +1,8 @@
-streamlit
+Flask
 groq
-pymupdf
 pdfplumber
+PyMuPDF
 python-docx
 pandas
 openpyxl
+gunicorn
