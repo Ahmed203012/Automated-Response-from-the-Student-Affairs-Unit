@@ -216,12 +216,12 @@ def ask():
         chunks = read_all_chunks()
         context = get_relevant_context(q, chunks)
         
-        # قائمة النماذج الرسمية النشطة حالياً على Groq
+        # قائمة النماذج الرسمية النشطة حالياً على Groq (تم تحديثها)
         models_to_try = [
-            "llama-3.3-70b-specdec",
+            "llama-3.3-70b-versatile",
             "llama-3.1-8b-instant",
-            "llama3-70b-8192",
-            "llama3-8b-8192"
+            "openai/gpt-oss-120b",
+            "openai/gpt-oss-20b"
         ]
         
         prompt = f"""أنت مساعد آلي رسمي لوحدة شؤون الطلبة في كليات الرؤية بالرياض.
