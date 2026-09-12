@@ -71,22 +71,35 @@ def read_all_chunks():
             try:
                 excel_file = pd.ExcelFile(file)
                 for sheet in excel_file.sheet_names:
-                    df = pd.read_excel(file, sheet_name=sheet, nrows=100).dropna(how='all')
+                    # زيادة عدد الصفوف المقروءة من 100 إلى 1000
+                    df = pd.read_excel(file, sheet_name=sheet, nrows=1000).dropna(how='all')
                     lines = []
                     for _, row in df.iterrows():
                         row_str = " | ".join([f"{col}: {val}" for col, val in row.items() if pd.notna(val)])
                         if row_str.strip():
-                            lines.append(row_str[:200])
-                        if len(lines) >= 30:
+                            # زيادة حجم النص المسموح به لكل صف من 200 إلى 300 حرف
+                            lines.append(row_str[:300])
+                        # زيادة عدد الصفوف المستخرجة من 30 إلى 150 صف
+                        if len(lines) >= 150:
                             break
                     if lines:
-                        chunks.append({"source": f"{file} ({sheet})", "text": "\n".join(lines)[:2000]})
+                        # زيادة الحجم الكلي لنص الشيت من 2000 إلى 4000 حرف
+                        chunks.append({"source": f"{file} ({sheet})", "text": "\n".join(lines)[:4000]})
+            except Exception:
+                pass
+                
+        elif low.endswith(".txt"):
+            try:
+                with open(file, 'r', encoding='utf-8') as f:
+                    txt = f.read()
+                    if txt and len(txt.strip()) > 20:
+                        chunks.append({"source": file, "text": txt[:2000]})
             except Exception:
                 pass
                 
     return chunks
 
-def get_relevant_context(query, chunks, max_chars=7000):
+def get_relevant_context(query, chunks, max_chars=15000):
     norm_query = normalize_arabic(query)
     stop_words = ["ما", "هي", "من", "في", "على", "عن", "التي", "الذي", "ماهي", "اين"]
     query_words = [w for w in norm_query.split() if len(w) > 2 and w not in stop_words]
@@ -214,7 +227,7 @@ def ask():
             return jsonify({"error": "GROQ_API_KEY غير موجود في Render"})
             
         chunks = read_all_chunks()
-        context = get_relevant_context(q, chunks)
+        context = get_relevant_context(q, chunks, max_chars=15000)
         
         # قائمة النماذج الرسمية النشطة حالياً على Groq (تم تحديثها)
         models_to_try = [
@@ -230,7 +243,8 @@ def ask():
 1. أجب باللغة العربية المباشرة والواضحة فقط.
 2. لا تكتب أي تفكير أو جمل إنجليزية.
 3. استخرج الإجابة بدقة وبإيجاز من النص المرجعي.
-4. إذا لم تجد الإجابة، أجب بـ: "عذراً، لا توجد معلومات صريحة في المصادر المرفقة. يُرجى مراجعة وحدة شؤون الطلبة."
+4. ركز جيداً على الأسماء والإيميلات وأرقام التواصل إن وجدت في النص المرجعي.
+5. إذا لم تجد الإجابة، أجب بـ: "عذراً، لا توجد معلومات صريحة في المصادر المرفقة. يُرجى مراجعة وحدة شؤون الطلبة."
 
 النص المرجعي:
 {context}
