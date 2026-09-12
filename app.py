@@ -7,6 +7,12 @@ from docx import Document
 import pandas as pd
 from groq import Groq
 
+# --- إضافة جديدة: استيراد ملف البيانات الثابتة ---
+try:
+    from knowledge_base import HARDCODED_DATA
+except ImportError:
+    HARDCODED_DATA = []
+
 app = Flask(__name__)
 
 # إعداد Groq Client
@@ -17,7 +23,7 @@ def normalize_arabic(text):
     if not text:
         return ""
     text = str(text)
-    text = re.sub(r'[إأآا]', 'ا', text)
+    text = re.sub(r'[إأآآ]', 'ا', text)
     text = re.sub(r'\s+', ' ', text)
     return text.lower().strip()
 
@@ -34,7 +40,9 @@ def clean_llm_response(text):
 
 @lru_cache(maxsize=1)
 def read_all_chunks():
-    chunks = []
+    # --- إضافة جديدة: قراءة البيانات المضمنة أولاً ---
+    chunks = list(HARDCODED_DATA)
+    
     for file in os.listdir("."):
         if not os.path.isfile(os.path.join(".", file)):
             continue
