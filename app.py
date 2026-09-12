@@ -7,7 +7,7 @@ from docx import Document
 import pandas as pd
 from groq import Groq
 
-# --- إضافة جديدة: استيراد ملف البيانات الثابتة ---
+# --- استيراد ملف البيانات الثابتة ---
 try:
     from knowledge_base import HARDCODED_DATA
 except ImportError:
@@ -40,14 +40,14 @@ def clean_llm_response(text):
 
 @lru_cache(maxsize=1)
 def read_all_chunks():
-    # --- إضافة جديدة: قراءة البيانات المضمنة أولاً ---
+    # قراءة البيانات المضمنة أولاً
     chunks = list(HARDCODED_DATA)
     
     for file in os.listdir("."):
         if not os.path.isfile(os.path.join(".", file)):
             continue
         low = file.lower()
-        if file.startswith(".") or low in ["app.py", "requirements.txt"] or "venv" in low:
+        if file.startswith(".") or low in ["app.py", "requirements.txt", "knowledge_base.py"] or "venv" in low:
             continue
             
         try:
@@ -57,19 +57,19 @@ def read_all_chunks():
                     try:
                         text = page.get_text("text")
                         if text and len(text.strip()) > 20:
-                            chunks.append({"source": f"{file} (ص {i+1})", "text": text[:2500]})
+                            chunks.append({"source": f"{file} (ص {i+1})", "text": text[:3000]})
                     except:
                         continue
                 doc.close()
             elif low.endswith(".docx"):
                 doc = Document(file)
-                txt = "\n".join([p.text for p in doc.paragraphs if p.text.strip()][:100])
+                txt = "\n".join([p.text for p in doc.paragraphs if p.text.strip()][:150])
                 if txt:
-                    chunks.append({"source": file, "text": txt[:2500]})
+                    chunks.append({"source": file, "text": txt[:3000]})
             elif low.endswith((".xlsx", ".xls")):
                 excel_file = pd.ExcelFile(file)
                 for sheet in excel_file.sheet_names:
-                    df = pd.read_excel(file, sheet_name=sheet, nrows=300).dropna(how='all')
+                    df = pd.read_excel(file, sheet_name=sheet, nrows=500).dropna(how='all')
                     lines = []
                     for _, row in df.iterrows():
                         row_str = " | ".join([f"{col}: {val}" for col, val in row.items() if pd.notna(val)])
@@ -81,14 +81,14 @@ def read_all_chunks():
                 with open(file, 'r', encoding='utf-8') as f:
                     txt = f.read()
                     if txt and len(txt.strip()) > 20:
-                        chunks.append({"source": file, "text": txt[:2500]})
+                        chunks.append({"source": file, "text": txt[:3000]})
         except Exception as file_err:
             print(f"Error reading file {file}: {file_err}")
             continue
                 
     return chunks
 
-def get_relevant_context(query, chunks, max_chars=6000):
+def get_relevant_context(query, chunks, max_chars=12000):
     norm_query = normalize_arabic(query)
     stop_words = ["ما", "هي", "من", "في", "على", "عن", "التي", "الذي", "ماهي", "اين", "اللجان", "الوحدات"]
     query_words = [w for w in norm_query.split() if len(w) > 2 and w not in stop_words]
@@ -108,13 +108,13 @@ def get_relevant_context(query, chunks, max_chars=6000):
     scored.sort(key=lambda x: x[0], reverse=True)
     
     selected = ""
-    for _, item in scored[:5]:
+    for _, item in scored[:10]:
         entry = f"المصدر [{item['source']}]:\n{item['text']}\n\n"
         if len(selected) + len(entry) <= max_chars:
             selected += entry
             
     if not selected and chunks:
-        selected = "\n".join([c["text"][:500] for c in chunks[:3]])
+        selected = "\n".join([c["text"][:800] for c in chunks[:5]])
         
     return selected
 
@@ -141,16 +141,37 @@ body { background: #fafaf9; margin:0; padding:0; direction: rtl; text-align: rig
 .search-box button:hover { background:#6e5a42; }
 .answer-box { background:#f4f4f6; border-right:5px solid #8C7355; padding:20px; border-radius:10px; margin-top:20px; line-height:1.8; white-space: pre-wrap; font-size: 16px; color: #222; }
 .loader { text-align:center; padding:20px; display:none; color:#8C7355; font-weight:bold; }
-.disclaimer { margin-top:50px; padding-top:15px; border-top:1px solid #e0e0e0; font-size:12px; color:#888; text-align:right; line-height: 1.6; }
-.disclaimer a { color:#8C7355; text-decoration:none; font-weight:bold; }
+/* تنسيق مستطيل التنبيه الجديد */
+.disclaimer-box { 
+    background-color: #8C7355; 
+    color: #ffffff; 
+    padding: 20px; 
+    border-radius: 10px; 
+    margin-top: 30px; 
+    font-size: 13px; 
+    line-height: 1.8; 
+    text-align: right;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+.disclaimer-box a { 
+    color: #ffffff; 
+    text-decoration: underline; 
+    font-weight: bold; 
+}
+.disclaimer-box a:hover { 
+    color: #f0f0f0; 
+    text-decoration: none; 
+}
 </style>
 </head>
 <body>
 <div class="container">
 <div class="header">
+<!-- إضافة اللوجو هنا -->
+<img src="logo.png" alt="شعار كليات الرؤية" style="max-height: 100px; margin-bottom: 15px;">
 <h1>كليات الرؤية - Vision Colleges</h1>
 <h2>الاستفسار الآلي - وحدة شؤون الطلبة</h2>
-<p>مرحباً بكم في كلية الرؤية بالرياض، نرحب باستفساراتكم حول لوائح وأنظمة الكلية والأنشطة الطلابية.</p>
+<p>مرحباً بكم في كلية الرؤية بالرياض، نرحب باستفساراتكم حول لوائح وأنظمة الكلية.</p>
 </div>
 
 <div class="search-box">
@@ -160,10 +181,12 @@ body { background: #fafaf9; margin:0; padding:0; direction: rtl; text-align: rig
 <div id="answer"></div>
 </div>
 
-<div class="disclaimer">
-تنبيه: هذا برنامج رد آلي. اللوائح الرسمية المعلنة عبر الرابط التالي هي المرجع المعتمد:<br>
-<a href="https://elearning.vision.edu.sa/course/view.php?id=788" target="_blank">https://elearning.vision.edu.sa/course/view.php?id=788</a>
+<!-- مستطيل التنبيه الجديد -->
+<div class="disclaimer-box">
+    <p style="margin: 0 0 10px 0;">تنبيه: هذا برنامج رد آلي، وربما تكون بعض الإجابات أو الردود غير دقيقة. اللوائح الرسمية المعلنة عبر الرابط التالي هي المرجع المعتمد:</p>
+    <p style="margin: 0;"><a href="https://elearning.vision.edu.sa/course/view.php?id=788" target="_blank">https://elearning.vision.edu.sa/course/view.php?id=788</a></p>
 </div>
+
 </div>
 
 <script>
@@ -231,7 +254,7 @@ def ask():
 1. أجب باللغة العربية المباشرة والواضحة فقط، وبإيجاز.
 2. لا تكتب أي تفكير أو جمل إنجليزية.
 3. استخرج الإجابة بدقة من النص المرجعي.
-4. إذا سأل الطالب عن اسم شخص (مثل "ملاذ") أو عن لجانه ووحداته، اذكر كل اللجان التي ورد فيها هذا الاسم في النص المرجعي.
+4. إذا سأل الطالب عن اسم شخص (مثل "ملاذ" أو "أحمد مرسي") أو عن لجانه ووحداته، اذكر كل اللجان التي ورد فيها هذا الاسم في النص المرجعي.
 5. إذا لم تجد الإجابة، أجب بـ: "عذراً، لا توجد معلومات صريحة في المصادر المرفقة. يُرجى مراجعة وحدة شؤون الطلبة."
 
 النص المرجعي:
@@ -251,7 +274,7 @@ def ask():
                         {"role": "user", "content": prompt}
                     ],
                     temperature=0.1,
-                    max_tokens=800
+                    max_tokens=1024
                 )
                 raw_ans = completion.choices[0].message.content.strip()
                 ans = clean_llm_response(raw_ans)
