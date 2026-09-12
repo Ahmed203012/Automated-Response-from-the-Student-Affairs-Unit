@@ -1,18 +1,17 @@
 import os
 import re
-import traceback
 from flask import Flask, request, render_template_string, jsonify
 from functools import lru_cache
 import pymupdf
 from docx import Document
 import pandas as pd
-from google import genai
+from groq import Groq
 
 app = Flask(__name__)
 
-# إعداد Gemini Client
-api_key = os.environ.get("GEMINI_API_KEY")
-client = genai.Client(api_key=api_key) if api_key else None
+# إعداد Groq Client
+api_key = os.environ.get("GROQ_API_KEY")
+client = Groq(api_key=api_key) if api_key else None
 
 def normalize_arabic(text):
     if not text:
@@ -50,7 +49,7 @@ def read_all_chunks():
                     try:
                         text = page.get_text("text")
                         if text and len(text.strip()) > 20:
-                            chunks.append({"source": f"{file} (ص {i+1})", "text": text[:3000]})
+                            chunks.append({"source": f"{file} (ص {i+1})", "text": text[:2500]})
                     except:
                         continue
                 doc.close()
@@ -58,32 +57,30 @@ def read_all_chunks():
                 doc = Document(file)
                 txt = "\n".join([p.text for p in doc.paragraphs if p.text.strip()][:100])
                 if txt:
-                    chunks.append({"source": file, "text": txt[:3000]})
+                    chunks.append({"source": file, "text": txt[:2500]})
             elif low.endswith((".xlsx", ".xls")):
                 excel_file = pd.ExcelFile(file)
                 for sheet in excel_file.sheet_names:
-                    # قراءة 300 صف فقط لتفادي أي تعليق
                     df = pd.read_excel(file, sheet_name=sheet, nrows=300).dropna(how='all')
                     lines = []
                     for _, row in df.iterrows():
                         row_str = " | ".join([f"{col}: {val}" for col, val in row.items() if pd.notna(val)])
                         if row_str.strip():
-                            lines.append(row_str[:400])
+                            lines.append(row_str[:300])
                     if lines:
                         chunks.append({"source": f"{file} ({sheet})", "text": "\n".join(lines)})
             elif low.endswith(".txt"):
                 with open(file, 'r', encoding='utf-8') as f:
                     txt = f.read()
                     if txt and len(txt.strip()) > 20:
-                        chunks.append({"source": file, "text": txt[:3000]})
+                        chunks.append({"source": file, "text": txt[:2500]})
         except Exception as file_err:
-            # تسجيل الخطأ في سجلات Render ولكن عدم تعطيل التطبيق
             print(f"Error reading file {file}: {file_err}")
             continue
                 
     return chunks
 
-def get_relevant_context(query, chunks, max_chars=12000):
+def get_relevant_context(query, chunks, max_chars=6000):
     norm_query = normalize_arabic(query)
     stop_words = ["ما", "هي", "من", "في", "على", "عن", "التي", "الذي", "ماهي", "اين", "اللجان", "الوحدات"]
     query_words = [w for w in norm_query.split() if len(w) > 2 and w not in stop_words]
@@ -208,15 +205,16 @@ def ask():
         if not q:
             return jsonify({"error": "يرجى كتابة السؤال"})
         if not client:
-            return jsonify({"error": "GEMINI_API_KEY غير موجود في Render"})
+            return jsonify({"error": "GROQ_API_KEY غير موجود في Render"})
             
         chunks = read_all_chunks()
         context = get_relevant_context(q, chunks)
         
-        # قائمة النماذج الرسمية النشطة حاليًا (تم تحديثها)
+        # قائمة النماذج النشطة والمستقرة حالياً على Groq
         models_to_try = [
-            "gemini-3.8-flash",
-            "gemini-3.1-pro-preview"
+            "llama-3.3-70b-versatile",
+            "mixtral-8x7b-32768",
+            "openai/gpt-oss-120b"
         ]
         
         prompt = f"""أنت مساعد آلي رسمي لوحدة شؤون الطلبة في كليات الرؤية بالرياض.
@@ -238,11 +236,16 @@ def ask():
         last_err = ""
         for model_name in models_to_try:
             try:
-                response = client.models.generate_content(
+                completion = client.chat.completions.create(
                     model=model_name,
-                    contents=prompt
+                    messages=[
+                        {"role": "system", "content": "أنت مساعد يجيب باللغة العربية المباشرة فقط."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.1,
+                    max_tokens=800
                 )
-                raw_ans = response.text.strip()
+                raw_ans = completion.choices[0].message.content.strip()
                 ans = clean_llm_response(raw_ans)
                 if ans:
                     return jsonify({"answer": ans})
@@ -252,8 +255,6 @@ def ask():
                 
         return jsonify({"error": f"تعذر الاتصال بكافة النماذج. آخر خطأ: {last_err[:400]}"})
     except Exception as e:
-        # تسجيل الخطأ في السجلات لمعرفة السبب الحقيقي
-        print("Internal Error:", traceback.format_exc())
         return jsonify({"error": f"خطأ داخلي: {str(e)[:500]}"})
 
 if __name__ == "__main__":
