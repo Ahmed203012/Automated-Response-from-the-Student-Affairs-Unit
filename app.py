@@ -1,6 +1,6 @@
 import os
 import re
-from flask import Flask, request, render_template_string, jsonify, send_file
+from flask import Flask, request, render_template_string, jsonify
 from functools import lru_cache
 import pymupdf
 from docx import Document
@@ -216,11 +216,12 @@ def ask():
         chunks = read_all_chunks()
         context = get_relevant_context(q, chunks)
         
+        # قائمة النماذج الرسمية النشطة حالياً على Groq
         models_to_try = [
+            "llama-3.3-70b-specdec",
             "llama-3.1-8b-instant",
-            "llama3-8b-8192",
-            "gemma2-9b-it",
-            "mixtral-8x7b-32768"
+            "llama3-70b-8192",
+            "llama3-8b-8192"
         ]
         
         prompt = f"""أنت مساعد آلي رسمي لوحدة شؤون الطلبة في كليات الرؤية بالرياض.
