@@ -49,8 +49,8 @@ def read_all_chunks():
                     try:
                         text = page.get_text("text")
                         if text and len(text.strip()) > 20:
-                            if len(text) > 2000:
-                                text = text[:2000]
+                            if len(text) > 3000:
+                                text = text[:3000]
                             chunks.append({"source": f"{file} (ص {i+1})", "text": text})
                     except Exception:
                         continue
@@ -61,9 +61,9 @@ def read_all_chunks():
         elif low.endswith(".docx"):
             try:
                 doc = Document(file)
-                txt = "\n".join([p.text for p in doc.paragraphs if p.text.strip()][:50])
+                txt = "\n".join([p.text for p in doc.paragraphs if p.text.strip()][:100])
                 if txt:
-                    chunks.append({"source": file, "text": txt[:2000]})
+                    chunks.append({"source": file, "text": txt[:3000]})
             except Exception:
                 pass
                 
@@ -71,18 +71,16 @@ def read_all_chunks():
             try:
                 excel_file = pd.ExcelFile(file)
                 for sheet in excel_file.sheet_names:
-                    # زيادة عدد الصفوف المقروءة إلى 500
-                    df = pd.read_excel(file, sheet_name=sheet, nrows=500).dropna(how='all')
+                    # قراءة حتى 2000 صف لضمان عدم تفويت أي اسم
+                    df = pd.read_excel(file, sheet_name=sheet, nrows=2000).dropna(how='all')
                     lines = []
                     for _, row in df.iterrows():
                         row_str = " | ".join([f"{col}: {val}" for col, val in row.items() if pd.notna(val)])
                         if row_str.strip():
-                            lines.append(row_str[:400])
-                        if len(lines) >= 300:
-                            break
+                            lines.append(row_str[:500])
                     if lines:
-                        # زيادة الحجم الأقصى لنص الشيت إلى 8000 حرف
-                        chunks.append({"source": f"{file} ({sheet})", "text": "\n".join(lines)[:8000]})
+                        # عدم قطع النص عند حد معين، وترك المساحة للذكاء الاصطناعي
+                        chunks.append({"source": f"{file} ({sheet})", "text": "\n".join(lines)})
             except Exception:
                 pass
                 
@@ -91,40 +89,40 @@ def read_all_chunks():
                 with open(file, 'r', encoding='utf-8') as f:
                     txt = f.read()
                     if txt and len(txt.strip()) > 20:
-                        chunks.append({"source": file, "text": txt[:2000]})
+                        chunks.append({"source": file, "text": txt[:3000]})
             except Exception:
                 pass
                 
     return chunks
 
-def get_relevant_context(query, chunks, max_chars=15000):
+def get_relevant_context(query, chunks, max_chars=25000):
     norm_query = normalize_arabic(query)
-    stop_words = ["ما", "هي", "من", "في", "على", "عن", "التي", "الذي", "ماهي", "اين"]
+    stop_words = ["ما", "هي", "من", "في", "على", "عن", "التي", "الذي", "ماهي", "اين", "اللجان", "الوحدات"]
     query_words = [w for w in norm_query.split() if len(w) > 2 and w not in stop_words]
     
     scored = []
     for item in chunks:
         score = 0
- **        norm_text = normalize_arabic(item["text"])
+        norm_text = normalize_arabic(item["text"])
         for w in query_words:
             if w in norm_text:
                 score += 2
         if norm_query in norm_text:
-            score += 10
+            score += 20 # مضاعفة النقاط عند وجود تطابق حرفي
         if score > 0:
             scored.append((score, item))
             
     scored.sort(key=lambda x: x[0], reverse=True)
     
     selected = ""
-    # زيادة عدد الأجزاء المختارة إلى 15 جزءاً لضمان جمع كل اللجان
-    for _, item in scored[:15]:
+    # زيادة عدد الأجزاء المختارة لضمان جمع كل اللجان المذكورة في الملفات
+    for _, item in scored[:20]:
         entry = f"المصدر [{item['source']}]:\n{item['text']}\n\n"
         if len(selected) + len(entry) <= max_chars:
             selected += entry
             
     if not selected and chunks:
-        selected = "\n".join([c["text"][:600] for c in chunks[:4]])
+        selected = "\n".join([c["text"][:800] for c in chunks[:6]])
         
     return selected
 
@@ -226,7 +224,7 @@ def ask():
             return jsonify({"error": "GROQ_API_KEY غير موجود في Render"})
             
         chunks = read_all_chunks()
-        context = get_relevant_context(q, chunks, max_chars=15000)
+        context = get_relevant_context(q, chunks, max_chars=25000)
         
         models_to_try = [
             "llama-3.3-70b-versatile",
@@ -235,16 +233,16 @@ def ask():
             "openai/gpt-oss-20b"
         ]
         
-        # تم تحسين التعليمات لضمان ذكر جميع اللجان
+        # تم تحسين التعليمات لضمان البحث عن الاسم في كل السطور وذكر جميع اللجان
         prompt = f"""أنت مساعد آلي رسمي لوحدة شؤون الطلبة في كليات الرؤية بالرياض.
 
 التعليمات:
 1. أجب باللغة العربية المباشرة والواضحة فقط.
 2. لا تكتب أي تفكير أو جمل إنجليزية.
 3. استخرج الإجابة بدقة وبإيجاز من النص المرجعي.
-4. إذا سأل الطالب عن شخص (مثل أحمد مرسي) ولجانه أو وحداته، يجب عليك ذكركل اللجان** التي وردت باسمه في النص المرجعي دون استثناء. ابحث في جميع السطور والأجزاء.
+4. إذا سأل الطالب عن اسم شخص (مثل "ملاذ" أو "أحمد مرسي") أو عن لجانه ووحداته، يجب عليك قراءة كامل النص المرجعي والبحث عن هذا الاسم بدقة، ثم ذكر **كل اللجان أو الوحدات** التي ورد فيها هذا الاسم دون استثناء أو نسيان أي منها. لا تكتفِ بذكر لجنة واحدة.
 5. ركز جيداً على الأسماء والإيميلات وأرقام التواصل إن وجدت في النص المرجعي.
-6. إذا لم تجد الإجابة، أجب بـ: "عذراً، لا توجد معلومات صريحة في المصادر المرفقة. يُرجى مراجعة وحدة شؤون الطلبة."
+6. إذا لم تجد الإجابة بعد البحث الكامل، أجب بـ: "عذراً، لا توجد معلومات صريحة في المصادر المرفقة. يُرجى مراجعة وحدة شؤون الطلبة."
 
 النص المرجعي:
 {context}
@@ -263,7 +261,7 @@ def ask():
                         {"role": "user", "content": prompt}
                     ],
                     temperature=0.1,
-                    max_tokens=1024
+                    max_tokens=2048
                 )
                 raw_ans = completion.choices[0].message.content.strip()
                 ans = clean_llm_response(raw_ans)
