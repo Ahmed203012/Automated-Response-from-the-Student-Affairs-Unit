@@ -1,5 +1,5 @@
 Flask
-groq
+google-genai
 PyMuPDF
 python-docx
 pandas
