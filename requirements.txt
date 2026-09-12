@@ -1,6 +1,5 @@
 Flask
 groq
-pdfplumber
 PyMuPDF
 python-docx
 pandas
