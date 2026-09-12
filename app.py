@@ -1,16 +1,13 @@
 import os
 import re
-from flask import Flask, request, render_template_string, jsonify, send_file
+from flask import Flask, request, render_template_string, jsonify
 from functools import lru_cache
-import fitz  # PyMuPDF
-import pdfplumber
+import fitz  # PyMuPDF - خفيف جداً وسريع
 from docx import Document
 import pandas as pd
 from groq import Groq
 
 app = Flask(__name__)
-
-# إعداد Groq Client
 api_key = os.environ.get("GROQ_API_KEY")
 client = Groq(api_key=api_key) if api_key else None
 
@@ -24,7 +21,6 @@ def normalize_arabic(text):
     return text.lower().strip()
 
 def clean_llm_response(text):
-    """ إزالة التفكير الإنجليزي والتنسيقات غير المرغوبة """
     if not text:
         return ""
     text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
@@ -35,93 +31,94 @@ def clean_llm_response(text):
     lines = [line for line in text.split('\n') if not re.match(r'^\s*:[A-Za-z\s]+\d*', line)]
     return "\n".join(lines).strip()
 
+# قراءة خفيفة جداً تحافظ على الذاكرة
 @lru_cache(maxsize=1)
 def read_all_chunks():
     chunks = []
-    folder_path = "."
-    for file in os.listdir(folder_path):
-        file_path = os.path.join(folder_path, file)
+    for file in os.listdir("."):
+        file_path = os.path.join(".", file)
         if not os.path.isfile(file_path):
             continue
-        if file.startswith(".") or file in ["app.py", "requirements.txt"]:
+        low = file.lower()
+        if file.startswith(".") or low in ["app.py", "requirements.txt"] or "venv" in low:
             continue
             
-        # قراءة ملفات PDF
-        if file.lower().endswith(".pdf"):
+        # PDF - قراءة خفيفة بـ PyMuPDF
+        if low.endswith(".pdf"):
             try:
-                with pdfplumber.open(file_path) as pdf:
-                    for i, page in enumerate(pdf.pages):
-                        text = page.extract_text()
-                        if text and len(text.strip()) > 10:
-                            chunks.append({"source": f"{file} (صفحة {i+1})", "text": text})
-            except Exception:
-                try:
-                    doc = fitz.open(file_path)
-                    for i, page in enumerate(doc):
-                        text = page.get_text()
-                        if text and len(text.strip()) > 10:
-                            chunks.append({"source": f"{file} (صفحة {i+1})", "text": text})
-                except Exception:
-                    pass
-                    
-        # قراءة ملفات Word
-        elif file.lower().endswith(".docx"):
-            try:
-                doc = Document(file_path)
-                full_text = [p.text for p in doc.paragraphs if p.text.strip()]
-                if full_text:
-                    chunks.append({"source": file, "text": "\n".join(full_text)})
+                doc = fitz.open(file_path)
+                for i, page in enumerate(doc):
+                    try:
+                        text = page.get_text("text")
+                        if text and len(text.strip()) > 20:
+                            if len(text) > 2000:
+                                text = text[:2000]
+                            chunks.append({"source": f"{file} (ص {i+1})", "text": text})
+                    except Exception:
+                        continue
+                doc.close()
             except Exception:
                 pass
                 
-        # قراءة ملفات Excel
-        elif file.lower().endswith((".xlsx", ".xls")):
+        # Word
+        elif low.endswith(".docx"):
+            try:
+                doc = Document(file_path)
+                txt = "\n".join([p.text for p in doc.paragraphs if p.text.strip()][:50])
+                if txt:
+                    chunks.append({"source": file, "text": txt[:2000]})
+            except Exception:
+                pass
+                
+        # Excel
+        elif low.endswith((".xlsx", ".xls")):
             try:
                 excel_file = pd.ExcelFile(file_path)
-                for sheet_name in excel_file.sheet_names:
-                    df = pd.read_excel(file_path, sheet_name=sheet_name).dropna(how='all')
+                for sheet in excel_file.sheet_names:
+                    df = pd.read_excel(file_path, sheet_name=sheet, nrows=100).dropna(how='all')
                     lines = []
                     for _, row in df.iterrows():
                         row_str = " | ".join([f"{col}: {val}" for col, val in row.items() if pd.notna(val)])
                         if row_str.strip():
-                            lines.append(row_str)
+                            lines.append(row_str[:200])
+                        if len(lines) >= 30:
+                            break
                     if lines:
-                        for i in range(0, len(lines), 25):
-                            chunks.append({"source": f"{file} ({sheet_name})", "text": "\n".join(lines[i:i+25])})
+                        chunks.append({"source": f"{file} ({sheet})", "text": "\n".join(lines)[:2000]})
             except Exception:
                 pass
                 
     return chunks
 
-def get_relevant_context(query, chunks, max_chars=12000):
+def get_relevant_context(query, chunks, max_chars=8000):
     norm_query = normalize_arabic(query)
-    stop_words = ["ما", "هي", "ماهي", "من", "في", "على", "عن", "التي", "الذي", "بها", "اين", "هو"]
+    stop_words = ["ما", "هي", "من", "في", "على", "عن", "التي", "الذي", "ماهي", "اين"]
     query_words = [w for w in norm_query.split() if len(w) > 2 and w not in stop_words]
     
     scored = []
     for item in chunks:
         score = 0
         norm_text = normalize_arabic(item["text"])
-        for word in query_words:
-            if word in norm_text:
-                score += 3
+        for w in query_words:
+            if w in norm_text:
+                score += 2
         if norm_query in norm_text:
-            score += 15
-        scored.append((score, item))
-        
+            score += 10
+        if score > 0:
+            scored.append((score, item))
+            
     scored.sort(key=lambda x: x[0], reverse=True)
     
     selected = ""
-    for score, item in scored:
-        if score == 0 and len(selected) > 2000:
-            continue
-        entry = f"--- المصدر: {item['source']} ---\n{item['text']}\n\n"
+    for _, item in scored[:12]:  # أفضل 12 مقطع
+        entry = f"المصدر [{item['source']}]:\n{item['text']}\n\n"
         if len(selected) + len(entry) <= max_chars:
             selected += entry
-        else:
-            break
             
-    return selected if selected else "\n".join([c["text"] for c in chunks])[:max_chars]
+    if not selected and chunks:
+        selected = "\n".join([c["text"][:500] for c in chunks[:5]])
+        
+    return selected
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -136,44 +133,38 @@ HTML_TEMPLATE = """
 body { background: #fafaf9; margin:0; padding:0; direction: rtl; text-align: right; }
 .container { max-width: 800px; margin: 0 auto; padding: 30px 20px; }
 .header { text-align:center; padding: 20px 0; }
-.header img { width: 150px; height: auto; margin-bottom: 10px; }
 .header h1 { font-size: 26px; margin:10px 0 5px; color: #1a1a1a; }
 .header h2 { font-size: 18px; color: #8C7355; margin:0; }
 .header p { color: #666; font-size: 15px; margin-top:10px; }
 .search-box { background: white; padding: 25px; border-radius: 16px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); margin-top:20px; }
 .search-box input { width:100%; padding:14px 16px; border:1.5px solid #e5e5e5; border-radius: 10px; font-size:16px; text-align:right; direction:rtl; }
 .search-box input:focus { outline:none; border-color:#8C7355; }
-.search-box button { width:100%; margin-top:15px; background:#8C7355; color:white; border:none; padding:13px; border-radius:10px; font-size:16px; font-weight:bold; cursor:pointer; transition: background 0.2s; }
+.search-box button { width:100%; margin-top:15px; background:#8C7355; color:white; border:none; padding:13px; border-radius:10px; font-size:16px; font-weight:bold; cursor:pointer; }
 .search-box button:hover { background:#6e5a42; }
-.search-box button:disabled { background:#ccc; cursor:not-allowed; }
 .answer-box { background:#f4f4f6; border-right:5px solid #8C7355; padding:20px; border-radius:10px; margin-top:20px; line-height:1.8; white-space: pre-wrap; font-size: 16px; color: #222; }
-.loader { text-align:center; padding:20px; display:none; color:#8C7355; font-weight: bold; }
-.disclaimer { margin-top:50px; padding-top:15px; border-top:1px solid #e0e0e0; font-size:13px; color:#666; text-align:right; line-height: 1.6; }
-.disclaimer a { color:#8C7355; text-decoration: none; font-weight: bold; }
+.loader { text-align:center; padding:20px; display:none; color:#8C7355; font-weight:bold; }
+.disclaimer { margin-top:50px; padding-top:15px; border-top:1px solid #e0e0e0; font-size:12px; color:#888; text-align:right; }
+.disclaimer a { color:#8C7355; text-decoration:none; font-weight:bold; }
 </style>
 </head>
 <body>
 <div class="container">
 <div class="header">
-{% if logo_exists %}<img src="/logo.png" alt="Vision Colleges">{% endif %}
 <h1>كليات الرؤية - Vision Colleges</h1>
 <h2>الاستفسار الآلي - وحدة شؤون الطلبة</h2>
 <p>مرحباً بكم في كلية الرؤية بالرياض، نرحب باستفساراتكم حول لوائح وأنظمة الكلية والأنشطة الطلابية.</p>
 </div>
-
 <div class="search-box">
 <input type="text" id="q" placeholder="اكتب سؤالك هنا... مثال: ما هي اللجان التي بها أحمد مرسي؟" onkeypress="if(event.key==='Enter') ask()">
 <button id="btn" onclick="ask()">اضغط هنا للحصول على الإجابة</button>
 <div class="loader" id="loader">جاري البحث في اللوائح والقرارات...</div>
 <div id="answer"></div>
 </div>
-
 <div class="disclaimer">
-تنبيه: هذا برنامج رد آلي ويمكن أن تكون الإجابات في بعض الأحيان غير دقيقة، وعليه تعتبر اللوائح والأنظمة الرسمية المعلنة عبر الرابط التالي هي المرجع المعتمد والأخير للكلية:<br>
+تنبيه: هذا برنامج رد آلي. اللوائح الرسمية المعلنة عبر الرابط التالي هي المرجع المعتمد:<br>
 <a href="https://elearning.vision.edu.sa/course/view.php?id=788" target="_blank">https://elearning.vision.edu.sa/course/view.php?id=788</a>
 </div>
 </div>
-
 <script>
 async function ask(){
   const q = document.getElementById('q').value.trim();
@@ -181,26 +172,23 @@ async function ask(){
   const btn = document.getElementById('btn');
   const loader = document.getElementById('loader');
   const answerDiv = document.getElementById('answer');
-  btn.disabled = true;
-  loader.style.display = 'block';
-  answerDiv.innerHTML = '';
+  btn.disabled = true; loader.style.display = 'block'; answerDiv.innerHTML = '';
   try {
     const res = await fetch('/ask', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
       body: JSON.stringify({question: q})
     });
     const data = await res.json();
     if(data.answer){
       answerDiv.innerHTML = `<div class="answer-box">${data.answer}</div>`;
     } else {
-      answerDiv.innerHTML = `<div class="answer-box" style="background:#fef2f2;border-color:#ef4444;">${data.error || 'حدث خطأ أثناء جلب البيانات'}</div>`;
+      answerDiv.innerHTML = `<div class="answer-box" style="border-color:#ef4444;background:#fef2f2;">${data.error || 'حدث خطأ'}</div>`;
     }
   } catch(e){
-    answerDiv.innerHTML = `<div class="answer-box" style="background:#fef2f2;border-color:#ef4444;">خطأ في الاتصال بالسيرفر</div>`;
+    answerDiv.innerHTML = `<div class="answer-box" style="border-color:#ef4444;background:#fef2f2;">خطأ في الاتصال بالسيرفر</div>`;
   }
-  btn.disabled = false;
-  loader.style.display = 'none';
+  btn.disabled = false; loader.style.display = 'none';
 }
 </script>
 </body>
@@ -209,57 +197,52 @@ async function ask(){
 
 @app.route("/")
 def index():
-    logo_exists = os.path.exists("Logo.png") or os.path.exists("logo.png")
-    return render_template_string(HTML_TEMPLATE, logo_exists=logo_exists)
-
-@app.route("/logo.png")
-def logo():
-    if os.path.exists("Logo.png"):
-        return send_file("Logo.png", mimetype="image/png")
-    elif os.path.exists("logo.png"):
-        return send_file("logo.png", mimetype="image/png")
-    return "", 404
+    return render_template_string(HTML_TEMPLATE)
 
 @app.route("/ask", methods=["POST"])
 def ask():
-    data = request.get_json()
-    q = data.get("question", "").strip()
-    if not q:
-        return jsonify({"error": "يرجى كتابة السؤال"})
-    if not client:
-        return jsonify({"error": "مفتاح GROQ_API_KEY غير معرف في بيئة العمل"})
     try:
+        data = request.get_json()
+        q = data.get("question", "").strip()
+        if not q:
+            return jsonify({"error": "يرجى كتابة السؤال"})
+        if not client:
+            return jsonify({"error": "مفتاح GROQ_API_KEY غير موجود في Render"})
+        
         chunks = read_all_chunks()
+        if not chunks:
+            return jsonify({"error": "تعذر قراءة المستندات المرفقة"})
+            
         context = get_relevant_context(q, chunks)
         prompt = f"""أنت مساعد آلي رسمي لوحدة شؤون الطلبة في كليات الرؤية بالرياض.
 
 التعليمات:
-1. أجب باللغة العربية المباشرة فقط.
-2. لا تكتب أي أفكار أو تحليلات باللغة الإنجليزية إطلاقاً.
-3. استخرج الإجابة بدقة من النص المرجعي المرفق.
-4. إذا سئلت عن عضو معين، اذكر اللجان أو الأنشطة المذكور فيها مع رقم القرار إن وجد.
-5. إذا لم تجد الإجابة، أجب بـ: "عذراً، لا توجد معلومات صريحة في المصادر المرفقة. يُرجى مراجعة وحدة شؤون الطلبة."
+1. أجب باللغة العربية المباشرة والواضحة فقط.
+2. استخرج الإجابة بدقة وبإيجاز من النص المرجعي.
+3. إذا سئلت عن عضو معين، اذكر اللجان المذكور فيها مع رقم القرار إن وجد.
+4. إذا لم تجد الإجابة، أجب بـ: "عذراً، لا توجد معلومات صريحة في المصادر المرفقة. يُرجى مراجعة وحدة شؤون الطلبة."
 
 النص المرجعي:
 {context}
 
 سؤال الطالب: {q}
 
-الإجابة المباشرة (بالعربية فقط):"""
+الإجابة المباشرة:"""
 
         completion = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[
-                {"role": "system", "content": "أنت مساعد يجيب باللغة العربية المباشرة والواضحة فقط دون تفكير بالإنجليزية."},
+                {"role": "system", "content": "أنت مساعد يجيب باللغة العربية المباشرة فقط دون كتابة أفكار بالإنجليزية."},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.1
+            temperature=0.1,
+            max_tokens=800
         )
         raw_ans = completion.choices[0].message.content
         ans = clean_llm_response(raw_ans)
         return jsonify({"answer": ans})
     except Exception as e:
-        return jsonify({"error": f"حدث خطأ في النظام: {str(e)}"})
+        return jsonify({"error": f"خطأ داخلي: {str(e)[:300]}"})
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
