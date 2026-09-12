@@ -5,13 +5,13 @@ from functools import lru_cache
 import pymupdf
 from docx import Document
 import pandas as pd
-from groq import Groq
+from google import genai
 
 app = Flask(__name__)
 
-# إعداد Groq Client
-api_key = os.environ.get("GROQ_API_KEY")
-client = Groq(api_key=api_key) if api_key else None
+# إعداد Gemini Client
+api_key = os.environ.get("GEMINI_API_KEY")
+client = genai.Client(api_key=api_key) if api_key else None
 
 def normalize_arabic(text):
     if not text:
@@ -49,8 +49,8 @@ def read_all_chunks():
                     try:
                         text = page.get_text("text")
                         if text and len(text.strip()) > 20:
-                            if len(text) > 3000:
-                                text = text[:3000]
+                            if len(text) > 4000:
+                                text = text[:4000]
                             chunks.append({"source": f"{file} (ص {i+1})", "text": text})
                     except Exception:
                         continue
@@ -61,9 +61,9 @@ def read_all_chunks():
         elif low.endswith(".docx"):
             try:
                 doc = Document(file)
-                txt = "\n".join([p.text for p in doc.paragraphs if p.text.strip()][:100])
+                txt = "\n".join([p.text for p in doc.paragraphs if p.text.strip()][:150])
                 if txt:
-                    chunks.append({"source": file, "text": txt[:3000]})
+                    chunks.append({"source": file, "text": txt[:4000]})
             except Exception:
                 pass
                 
@@ -71,15 +71,13 @@ def read_all_chunks():
             try:
                 excel_file = pd.ExcelFile(file)
                 for sheet in excel_file.sheet_names:
-                    # قراءة حتى 2000 صف لضمان عدم تفويت أي اسم
-                    df = pd.read_excel(file, sheet_name=sheet, nrows=2000).dropna(how='all')
+                    df = pd.read_excel(file, sheet_name=sheet, nrows=3000).dropna(how='all')
                     lines = []
                     for _, row in df.iterrows():
                         row_str = " | ".join([f"{col}: {val}" for col, val in row.items() if pd.notna(val)])
                         if row_str.strip():
                             lines.append(row_str[:500])
                     if lines:
-                        # عدم قطع النص عند حد معين، وترك المساحة للذكاء الاصطناعي
                         chunks.append({"source": f"{file} ({sheet})", "text": "\n".join(lines)})
             except Exception:
                 pass
@@ -89,13 +87,13 @@ def read_all_chunks():
                 with open(file, 'r', encoding='utf-8') as f:
                     txt = f.read()
                     if txt and len(txt.strip()) > 20:
-                        chunks.append({"source": file, "text": txt[:3000]})
+                        chunks.append({"source": file, "text": txt[:4000]})
             except Exception:
                 pass
                 
     return chunks
 
-def get_relevant_context(query, chunks, max_chars=25000):
+def get_relevant_context(query, chunks, max_chars=50000):
     norm_query = normalize_arabic(query)
     stop_words = ["ما", "هي", "من", "في", "على", "عن", "التي", "الذي", "ماهي", "اين", "اللجان", "الوحدات"]
     query_words = [w for w in norm_query.split() if len(w) > 2 and w not in stop_words]
@@ -108,21 +106,20 @@ def get_relevant_context(query, chunks, max_chars=25000):
             if w in norm_text:
                 score += 2
         if norm_query in norm_text:
-            score += 20 # مضاعفة النقاط عند وجود تطابق حرفي
+            score += 20
         if score > 0:
             scored.append((score, item))
             
     scored.sort(key=lambda x: x[0], reverse=True)
     
     selected = ""
-    # زيادة عدد الأجزاء المختارة لضمان جمع كل اللجان المذكورة في الملفات
     for _, item in scored[:20]:
         entry = f"المصدر [{item['source']}]:\n{item['text']}\n\n"
         if len(selected) + len(entry) <= max_chars:
             selected += entry
             
     if not selected and chunks:
-        selected = "\n".join([c["text"][:800] for c in chunks[:6]])
+        selected = "\n".join([c["text"][:1000] for c in chunks[:8]])
         
     return selected
 
@@ -221,28 +218,26 @@ def ask():
         if not q:
             return jsonify({"error": "يرجى كتابة السؤال"})
         if not client:
-            return jsonify({"error": "GROQ_API_KEY غير موجود في Render"})
+            return jsonify({"error": "GEMINI_API_KEY غير موجود في Render"})
             
         chunks = read_all_chunks()
-        context = get_relevant_context(q, chunks, max_chars=25000)
+        context = get_relevant_context(q, chunks, max_chars=50000)
         
+        # النماذج الرسمية الحديثة من Gemini
         models_to_try = [
-            "llama-3.3-70b-versatile",
-            "llama-3.1-8b-instant",
-            "openai/gpt-oss-120b",
-            "openai/gpt-oss-20b"
+            "gemini-2.5-flash",
+            "gemini-2.5-pro"
         ]
         
-        # تم تحسين التعليمات لضمان البحث عن الاسم في كل السطور وذكر جميع اللجان
         prompt = f"""أنت مساعد آلي رسمي لوحدة شؤون الطلبة في كليات الرؤية بالرياض.
 
 التعليمات:
 1. أجب باللغة العربية المباشرة والواضحة فقط.
 2. لا تكتب أي تفكير أو جمل إنجليزية.
 3. استخرج الإجابة بدقة وبإيجاز من النص المرجعي.
-4. إذا سأل الطالب عن اسم شخص (مثل "ملاذ" أو "أحمد مرسي") أو عن لجانه ووحداته، يجب عليك قراءة كامل النص المرجعي والبحث عن هذا الاسم بدقة، ثم ذكر **كل اللجان أو الوحدات** التي ورد فيها هذا الاسم دون استثناء أو نسيان أي منها. لا تكتفِ بذكر لجنة واحدة.
+4. إذا سأل الطالب عن اسم شخص (مثل "ملاذ") أو عن لجانه ووحداته، يجب عليك قراءة كامل النص المرجعي والبحث عن هذا الاسم بدقة، ثم ذكر **كل اللجان أو الوحدات** التي ورد فيها هذا الاسم دون استثناء.
 5. ركز جيداً على الأسماء والإيميلات وأرقام التواصل إن وجدت في النص المرجعي.
-6. إذا لم تجد الإجابة بعد البحث الكامل، أجب بـ: "عذراً، لا توجد معلومات صريحة في المصادر المرفقة. يُرجى مراجعة وحدة شؤون الطلبة."
+6. إذا لم تجد الإجابة، أجب بـ: "عذراً، لا توجد معلومات صريحة في المصادر المرفقة. يُرجى مراجعة وحدة شؤون الطلبة."
 
 النص المرجعي:
 {context}
@@ -254,16 +249,11 @@ def ask():
         last_err = ""
         for model_name in models_to_try:
             try:
-                completion = client.chat.completions.create(
+                response = client.models.generate_content(
                     model=model_name,
-                    messages=[
-                        {"role": "system", "content": "أنت مساعد يجيب باللغة العربية المباشرة فقط."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    temperature=0.1,
-                    max_tokens=2048
+                    contents=prompt
                 )
-                raw_ans = completion.choices[0].message.content.strip()
+                raw_ans = response.text.strip()
                 ans = clean_llm_response(raw_ans)
                 if ans:
                     return jsonify({"answer": ans})
