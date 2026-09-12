@@ -1,5 +1,6 @@
 import os
 import re
+import traceback
 from flask import Flask, request, render_template_string, jsonify
 from functools import lru_cache
 import pymupdf
@@ -42,37 +43,27 @@ def read_all_chunks():
         if file.startswith(".") or low in ["app.py", "requirements.txt"] or "venv" in low:
             continue
             
-        if low.endswith(".pdf"):
-            try:
+        try:
+            if low.endswith(".pdf"):
                 doc = pymupdf.open(file)
                 for i, page in enumerate(doc):
                     try:
                         text = page.get_text("text")
                         if text and len(text.strip()) > 20:
-                            if len(text) > 3000:
-                                text = text[:3000]
-                            chunks.append({"source": f"{file} (ص {i+1})", "text": text})
-                    except Exception:
+                            chunks.append({"source": f"{file} (ص {i+1})", "text": text[:3000]})
+                    except:
                         continue
                 doc.close()
-            except Exception:
-                pass
-                
-        elif low.endswith(".docx"):
-            try:
+            elif low.endswith(".docx"):
                 doc = Document(file)
                 txt = "\n".join([p.text for p in doc.paragraphs if p.text.strip()][:100])
                 if txt:
                     chunks.append({"source": file, "text": txt[:3000]})
-            except Exception:
-                pass
-                
-        elif low.endswith((".xlsx", ".xls")):
-            try:
+            elif low.endswith((".xlsx", ".xls")):
                 excel_file = pd.ExcelFile(file)
                 for sheet in excel_file.sheet_names:
-                    # قراءة 500 صف فقط لتوفير التوكنات
-                    df = pd.read_excel(file, sheet_name=sheet, nrows=500).dropna(how='all')
+                    # قراءة 300 صف فقط لتفادي أي تعليق
+                    df = pd.read_excel(file, sheet_name=sheet, nrows=300).dropna(how='all')
                     lines = []
                     for _, row in df.iterrows():
                         row_str = " | ".join([f"{col}: {val}" for col, val in row.items() if pd.notna(val)])
@@ -80,17 +71,15 @@ def read_all_chunks():
                             lines.append(row_str[:400])
                     if lines:
                         chunks.append({"source": f"{file} ({sheet})", "text": "\n".join(lines)})
-            except Exception:
-                pass
-                
-        elif low.endswith(".txt"):
-            try:
+            elif low.endswith(".txt"):
                 with open(file, 'r', encoding='utf-8') as f:
                     txt = f.read()
                     if txt and len(txt.strip()) > 20:
                         chunks.append({"source": file, "text": txt[:3000]})
-            except Exception:
-                pass
+        except Exception as file_err:
+            # تسجيل الخطأ في سجلات Render ولكن عدم تعطيل التطبيق
+            print(f"Error reading file {file}: {file_err}")
+            continue
                 
     return chunks
 
@@ -114,7 +103,6 @@ def get_relevant_context(query, chunks, max_chars=12000):
     scored.sort(key=lambda x: x[0], reverse=True)
     
     selected = ""
-    # اختيار أفضل 5 أجزاء فقط لتقليل حجم الطلب
     for _, item in scored[:5]:
         entry = f"المصدر [{item['source']}]:\n{item['text']}\n\n"
         if len(selected) + len(entry) <= max_chars:
@@ -125,7 +113,88 @@ def get_relevant_context(query, chunks, max_chars=12000):
         
     return selected
 
-# ... (باقي كود HTML_TEMPLATE والـ routes كما هو تماماً دون أي تغيير) ...
+HTML_TEMPLATE = """
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>كليات الرؤية - استفسار شؤون الطلبة</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+* { font-family: 'Tajawal', sans-serif; box-sizing: border-box; }
+body { background: #fafaf9; margin:0; padding:0; direction: rtl; text-align: right; }
+.container { max-width: 800px; margin: 0 auto; padding: 30px 20px; }
+.header { text-align:center; padding: 20px 0; }
+.header h1 { font-size: 26px; margin:10px 0 5px; color: #1a1a1a; }
+.header h2 { font-size: 18px; color: #8C7355; margin:0; }
+.header p { color: #666; font-size: 15px; margin-top:10px; }
+.search-box { background: white; padding: 25px; border-radius: 16px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); margin-top:20px; }
+.search-box input { width:100%; padding:14px 16px; border:1.5px solid #e5e5e5; border-radius: 10px; font-size:16px; text-align:right; direction:rtl; }
+.search-box input:focus { outline:none; border-color:#8C7355; }
+.search-box button { width:100%; margin-top:15px; background:#8C7355; color:white; border:none; padding:13px; border-radius:10px; font-size:16px; font-weight:bold; cursor:pointer; }
+.search-box button:hover { background:#6e5a42; }
+.answer-box { background:#f4f4f6; border-right:5px solid #8C7355; padding:20px; border-radius:10px; margin-top:20px; line-height:1.8; white-space: pre-wrap; font-size: 16px; color: #222; }
+.loader { text-align:center; padding:20px; display:none; color:#8C7355; font-weight:bold; }
+.disclaimer { margin-top:50px; padding-top:15px; border-top:1px solid #e0e0e0; font-size:12px; color:#888; text-align:right; line-height: 1.6; }
+.disclaimer a { color:#8C7355; text-decoration:none; font-weight:bold; }
+</style>
+</head>
+<body>
+<div class="container">
+<div class="header">
+<h1>كليات الرؤية - Vision Colleges</h1>
+<h2>الاستفسار الآلي - وحدة شؤون الطلبة</h2>
+<p>مرحباً بكم في كلية الرؤية بالرياض، نرحب باستفساراتكم حول لوائح وأنظمة الكلية والأنشطة الطلابية.</p>
+</div>
+
+<div class="search-box">
+<input type="text" id="q" placeholder="مثال: من هو وكيل الكلية؟" onkeypress="if(event.key==='Enter') ask()">
+<button id="btn" onclick="ask()">للرد على استفسارك اضغط هنا</button>
+<div class="loader" id="loader">جاري البحث في اللوائح والقرارات...</div>
+<div id="answer"></div>
+</div>
+
+<div class="disclaimer">
+تنبيه: هذا برنامج رد آلي. اللوائح الرسمية المعلنة عبر الرابط التالي هي المرجع المعتمد:<br>
+<a href="https://elearning.vision.edu.sa/course/view.php?id=788" target="_blank">https://elearning.vision.edu.sa/course/view.php?id=788</a>
+</div>
+</div>
+
+<script>
+async function ask(){
+  const q = document.getElementById('q').value.trim();
+  if(!q){ alert('يرجى كتابة السؤال أولاً'); return; }
+  const btn = document.getElementById('btn'); 
+  const loader = document.getElementById('loader'); 
+  const answerDiv = document.getElementById('answer');
+  
+  btn.disabled = true; 
+  loader.style.display = 'block'; 
+  answerDiv.innerHTML = '';
+  
+  try {
+    const res = await fetch('/ask', { 
+      method:'POST', 
+      headers:{'Content-Type':'application/json'}, 
+      body: JSON.stringify({question: q}) 
+    });
+    const data = await res.json();
+    if(data.answer){ 
+      answerDiv.innerHTML = `<div class="answer-box">${data.answer}</div>`; 
+    } else { 
+      answerDiv.innerHTML = `<div class="answer-box" style="border-color:#ef4444;background:#fef2f2;">${data.error || 'حدث خطأ'}</div>`; 
+    }
+  } catch(e){ 
+    answerDiv.innerHTML = `<div class="answer-box" style="border-color:#ef4444;background:#fef2f2;">خطأ اتصال بالسيرفر</div>`; 
+  }
+  btn.disabled = false; 
+  loader.style.display = 'none';
+}
+</script>
+</body>
+</html>
+"""
 
 @app.route("/")
 def index():
@@ -142,9 +211,9 @@ def ask():
             return jsonify({"error": "GEMINI_API_KEY غير موجود في Render"})
             
         chunks = read_all_chunks()
-        context = get_relevant_context(q, chunks, max_chars=12000)
+        context = get_relevant_context(q, chunks)
         
-        # النماذج الرسمية الحديثة من Gemini
+        # قائمة النماذج الرسمية النشطة حاليًا (تم تحديثها)
         models_to_try = [
             "gemini-3.8-flash",
             "gemini-3.1-pro-preview"
@@ -153,10 +222,10 @@ def ask():
         prompt = f"""أنت مساعد آلي رسمي لوحدة شؤون الطلبة في كليات الرؤية بالرياض.
 
 التعليمات:
-1. أجب باللغة العربية المباشرة والواضحة فقط، وبإيجاز شديد.
+1. أجب باللغة العربية المباشرة والواضحة فقط، وبإيجاز.
 2. لا تكتب أي تفكير أو جمل إنجليزية.
 3. استخرج الإجابة بدقة من النص المرجعي.
-4. إذا سأل الطالب عن اسم شخص (مثل "ملاذ") أو عن لجانه ووحداته، اذكر **كل اللجان** التي ورد فيها هذا الاسم في النص المرجعي.
+4. إذا سأل الطالب عن اسم شخص (مثل "ملاذ") أو عن لجانه ووحداته، اذكر كل اللجان التي ورد فيها هذا الاسم في النص المرجعي.
 5. إذا لم تجد الإجابة، أجب بـ: "عذراً، لا توجد معلومات صريحة في المصادر المرفقة. يُرجى مراجعة وحدة شؤون الطلبة."
 
 النص المرجعي:
@@ -183,6 +252,8 @@ def ask():
                 
         return jsonify({"error": f"تعذر الاتصال بكافة النماذج. آخر خطأ: {last_err[:400]}"})
     except Exception as e:
+        # تسجيل الخطأ في السجلات لمعرفة السبب الحقيقي
+        print("Internal Error:", traceback.format_exc())
         return jsonify({"error": f"خطأ داخلي: {str(e)[:500]}"})
 
 if __name__ == "__main__":
