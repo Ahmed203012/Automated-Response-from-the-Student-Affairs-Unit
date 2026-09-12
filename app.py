@@ -1,87 +1,16 @@
 import os
 import re
-import streamlit as st
+from flask import Flask, request, render_template_string, jsonify, send_file
+from functools import lru_cache
 import fitz  # PyMuPDF
 import pdfplumber
 from docx import Document
 import pandas as pd
 from groq import Groq
 
-# 1. إعداد الصفحة
-st.set_page_config(page_title="استفسار شؤون الطلبة - كليات الرؤية", page_icon="🎓", layout="centered")
+app = Flask(__name__)
 
-# 2. حقن CSS لدعم اتجاه RTL والتنسيق العربي
-st.markdown("""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap');
-    
-    html, body, [class*="css"], div, p, span, input, button {
-        font-family: 'Tajawal', sans-serif !important;
-        direction: rtl !important;
-        text-align: right !important;
-    }
-    
-    .stApp {
-        direction: rtl !important;
-        text-align: right !important;
-    }
-    
-    h1, h2, h3, h4, .stMarkdown p {
-        text-align: right !important;
-        direction: rtl !important;
-    }
-    
-    .stTextInput input {
-        text-align: right !important;
-        direction: rtl !important;
-    }
-    
-    .stButton button {
-        width: 100% !important;
-        background-color: #8C7355 !important;
-        color: white !important;
-        font-weight: bold !important;
-        border-radius: 8px !important;
-        padding: 10px !important;
-        border: none !important;
-    }
-    
-    .stButton button:hover {
-        background-color: #6e5a42 !important;
-        color: white !important;
-    }
-    
-    .answer-box {
-        background-color: #f4f4f6;
-        border-right: 5px solid #8C7355;
-        padding: 18px;
-        border-radius: 8px;
-        margin-top: 15px;
-        direction: rtl !important;
-        text-align: right !important;
-        font-size: 16px;
-        line-height: 1.7;
-    }
-    
-    .disclaimer-box {
-        margin-top: 40px;
-        padding-top: 15px;
-        border-top: 1px solid #e0e0e0;
-        font-size: 13px;
-        color: #666666;
-        text-align: right !important;
-        direction: rtl !important;
-    }
-    </style>
-""", unsafe_allow_html=True)
-
-# 3. الشعار والعناوين
-st.image("Logo.png", width=160)
-st.title("كليات الرؤية - Vision Colleges")
-st.subheader("الاستفسار الآلي - وحدة شؤون الطلبة")
-st.write("مرحباً بكم في كلية الرؤية بالرياض، نرحب باستفساراتكم حول لوائح وأنظمة الكلية.")
-
-# 4. إعداد Groq Client
+# إعداد Groq Client
 api_key = os.environ.get("GROQ_API_KEY")
 client = Groq(api_key=api_key) if api_key else None
 
@@ -94,15 +23,29 @@ def normalize_arabic(text):
     text = re.sub(r'\s+', ' ', text)
     return text.lower().strip()
 
-# 5. قراءة واستخراج النصوص على مستوى المقاطع (Chunks) لكل الـ 27 ملفاً
-@st.cache_data(ttl=3600)
+def clean_llm_response(text):
+    """ إزالة التفكير الإنجليزي والتنسيقات غير المرغوبة """
+    if not text:
+        return ""
+    text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
+    if "Here's" in text or "Analyze User Input" in text:
+        match = re.search(r'[\u0600-\u06FF].*', text, re.DOTALL)
+        if match:
+            text = match.group(0)
+    lines = [line for line in text.split('\n') if not re.match(r'^\s*:[A-Za-z\s]+\d*', line)]
+    return "\n".join(lines).strip()
+
+@lru_cache(maxsize=1)
 def read_all_chunks():
     chunks = []
     folder_path = "."
-    
     for file in os.listdir(folder_path):
         file_path = os.path.join(folder_path, file)
-        
+        if not os.path.isfile(file_path):
+            continue
+        if file.startswith(".") or file in ["app.py", "requirements.txt"]:
+            continue
+            
         # قراءة ملفات PDF
         if file.lower().endswith(".pdf"):
             try:
@@ -132,136 +75,192 @@ def read_all_chunks():
                 pass
                 
         # قراءة ملفات Excel
-        elif file.lower().endswith(".xlsx") or file.lower().endswith(".xls"):
+        elif file.lower().endswith((".xlsx", ".xls")):
             try:
                 excel_file = pd.ExcelFile(file_path)
                 for sheet_name in excel_file.sheet_names:
                     df = pd.read_excel(file_path, sheet_name=sheet_name).dropna(how='all')
-                    sheet_lines = []
+                    lines = []
                     for _, row in df.iterrows():
                         row_str = " | ".join([f"{col}: {val}" for col, val in row.items() if pd.notna(val)])
                         if row_str.strip():
-                            sheet_lines.append(row_str)
-                    
-                    if sheet_lines:
-                        step = 25
-                        for i in range(0, len(sheet_lines), step):
-                            chunk_text = "\n".join(sheet_lines[i:i+step])
-                            chunks.append({"source": f"{file} (ورقة: {sheet_name} - صفوف {i+1}-{i+len(sheet_lines[i:i+step])})", "text": chunk_text})
+                            lines.append(row_str)
+                    if lines:
+                        for i in range(0, len(lines), 25):
+                            chunks.append({"source": f"{file} ({sheet_name})", "text": "\n".join(lines[i:i+25])})
             except Exception:
                 pass
                 
     return chunks
 
-# 6. دالة تصفية المقاطع الذكية وتوسيع نطاق البحث للأسماء واللجان
-def get_relevant_context(query, chunks, max_chars=16000):
+def get_relevant_context(query, chunks, max_chars=12000):
     norm_query = normalize_arabic(query)
-    # استخراج الكلمات المعنوية (أكثر من حرفين واستبعاد أدوات الاستفهام)
-    stop_words = ["ما", "هي", "ماهي", "من", "في", "على", "عن", "التي", "الذي", "بها", "ماهي", "اين"]
+    stop_words = ["ما", "هي", "ماهي", "من", "في", "على", "عن", "التي", "الذي", "بها", "اين", "هو"]
     query_words = [w for w in norm_query.split() if len(w) > 2 and w not in stop_words]
     
-    scored_chunks = []
+    scored = []
     for item in chunks:
         score = 0
         norm_text = normalize_arabic(item["text"])
-        
-        # إعطاء أولوية عالية جداً لمطابقة اسم الشخص
         for word in query_words:
             if word in norm_text:
                 score += 3
-        
-        # مطابقة الاسم بالكامل
         if norm_query in norm_text:
             score += 15
-            
-        # إذا كان المقطع قراراً إدارياً أو يحتوي على كلمة لجنة/لجان
-        if "لجنة" in norm_text or "قرار" in norm_text or "مجلس" in norm_text:
-            score += 2
-            
-        scored_chunks.append((score, item))
+        scored.append((score, item))
+        
+    scored.sort(key=lambda x: x[0], reverse=True)
     
-    scored_chunks.sort(key=lambda x: x[0], reverse=True)
-    
-    selected_text = ""
-    for score, item in scored_chunks:
-        chunk_entry = f"--- المصدر: {item['source']} ---\n{item['text']}\n\n"
-        if len(selected_text) + len(chunk_entry) <= max_chars:
-            selected_text += chunk_entry
+    selected = ""
+    for score, item in scored:
+        if score == 0 and len(selected) > 2000:
+            continue
+        entry = f"--- المصدر: {item['source']} ---\n{item['text']}\n\n"
+        if len(selected) + len(entry) <= max_chars:
+            selected += entry
         else:
             break
             
-    return selected_text if selected_text else "".join([f"--- المصدر: {c['source']} ---\n{c['text']}\n\n" for c in chunks])[:max_chars]
+    return selected if selected else "\n".join([c["text"] for c in chunks])[:max_chars]
 
-# 7. المدخلات ومعالجة الاستفسار
-q = st.text_input("أدخل استفسارك هنا:", placeholder="ما هي اللجان التي بها أحمد مرسي؟")
+HTML_TEMPLATE = """
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>كليات الرؤية - استفسار شؤون الطلبة</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+* { font-family: 'Tajawal', sans-serif; box-sizing: border-box; }
+body { background: #fafaf9; margin:0; padding:0; direction: rtl; text-align: right; }
+.container { max-width: 800px; margin: 0 auto; padding: 30px 20px; }
+.header { text-align:center; padding: 20px 0; }
+.header img { width: 150px; height: auto; margin-bottom: 10px; }
+.header h1 { font-size: 26px; margin:10px 0 5px; color: #1a1a1a; }
+.header h2 { font-size: 18px; color: #8C7355; margin:0; }
+.header p { color: #666; font-size: 15px; margin-top:10px; }
+.search-box { background: white; padding: 25px; border-radius: 16px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); margin-top:20px; }
+.search-box input { width:100%; padding:14px 16px; border:1.5px solid #e5e5e5; border-radius: 10px; font-size:16px; text-align:right; direction:rtl; }
+.search-box input:focus { outline:none; border-color:#8C7355; }
+.search-box button { width:100%; margin-top:15px; background:#8C7355; color:white; border:none; padding:13px; border-radius:10px; font-size:16px; font-weight:bold; cursor:pointer; transition: background 0.2s; }
+.search-box button:hover { background:#6e5a42; }
+.search-box button:disabled { background:#ccc; cursor:not-allowed; }
+.answer-box { background:#f4f4f6; border-right:5px solid #8C7355; padding:20px; border-radius:10px; margin-top:20px; line-height:1.8; white-space: pre-wrap; font-size: 16px; color: #222; }
+.loader { text-align:center; padding:20px; display:none; color:#8C7355; font-weight: bold; }
+.disclaimer { margin-top:50px; padding-top:15px; border-top:1px solid #e0e0e0; font-size:13px; color:#666; text-align:right; line-height: 1.6; }
+.disclaimer a { color:#8C7355; text-decoration: none; font-weight: bold; }
+</style>
+</head>
+<body>
+<div class="container">
+<div class="header">
+{% if logo_exists %}<img src="/logo.png" alt="Vision Colleges">{% endif %}
+<h1>كليات الرؤية - Vision Colleges</h1>
+<h2>الاستفسار الآلي - وحدة شؤون الطلبة</h2>
+<p>مرحباً بكم في كلية الرؤية بالرياض، نرحب باستفساراتكم حول لوائح وأنظمة الكلية والأنشطة الطلابية.</p>
+</div>
 
-btn = st.button("للرد على استفسارك اضغط هنا")
+<div class="search-box">
+<input type="text" id="q" placeholder="اكتب سؤالك هنا... مثال: ما هي اللجان التي بها أحمد مرسي؟" onkeypress="if(event.key==='Enter') ask()">
+<button id="btn" onclick="ask()">اضغط هنا للحصول على الإجابة</button>
+<div class="loader" id="loader">جاري البحث في اللوائح والقرارات...</div>
+<div id="answer"></div>
+</div>
 
-if btn or q:
-    if not q.strip():
-        st.warning("يرجى كتابة السؤال أولاً.")
-    elif not client:
-        st.error("مفتاح GROQ_API_KEY غير معرف في بيئة العمل.")
-    else:
-        with st.spinner("جاري البحث في اللوائح والقرارات الإدارية..."):
-            all_chunks = read_all_chunks()
-            
-            relevant_context = get_relevant_context(q, all_chunks)
-            
-            prompt = f"""أنت مساعد آلي رسمي لوحدة شؤون الطلبة في كليات الرؤية بالرياض.
+<div class="disclaimer">
+تنبيه: هذا برنامج رد آلي ويمكن أن تكون الإجابات في بعض الأحيان غير دقيقة، وعليه تعتبر اللوائح والأنظمة الرسمية المعلنة عبر الرابط التالي هي المرجع المعتمد والأخير للكلية:<br>
+<a href="https://elearning.vision.edu.sa/course/view.php?id=788" target="_blank">https://elearning.vision.edu.sa/course/view.php?id=788</a>
+</div>
+</div>
 
-التعليمات الصارمة:
-1. قدم الإجابة النهائية المباشرة باللغة العربية فقط.
-2. يمنع منعاً باتاً كتابة أفكارك أو خطوات البحث باللغة الإنجليزية.
-3. استخرج الإجابة بناءً على النص المرجعي المرفق بأسلوب مهذب ومباشر.
-4. إذا سُئلت عن اللجان أو التكاليف الخاصة بعضو معين، استخرج كافة اللجان والقرارات الإدارية التي ورد اسمه فيها مع ذكر اسم اللجنة ورقم/تاريخ القرار إن وجد.
-5. إذا لم تجد الإجابة صراحة في النص المرجعي، وجّه الطالب بلباقة لمراجعة وحدة شؤون الطلبة.
+<script>
+async function ask(){
+  const q = document.getElementById('q').value.trim();
+  if(!q){ alert('يرجى كتابة السؤال أولاً'); return; }
+  const btn = document.getElementById('btn');
+  const loader = document.getElementById('loader');
+  const answerDiv = document.getElementById('answer');
+  btn.disabled = true;
+  loader.style.display = 'block';
+  answerDiv.innerHTML = '';
+  try {
+    const res = await fetch('/ask', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({question: q})
+    });
+    const data = await res.json();
+    if(data.answer){
+      answerDiv.innerHTML = `<div class="answer-box">${data.answer}</div>`;
+    } else {
+      answerDiv.innerHTML = `<div class="answer-box" style="background:#fef2f2;border-color:#ef4444;">${data.error || 'حدث خطأ أثناء جلب البيانات'}</div>`;
+    }
+  } catch(e){
+    answerDiv.innerHTML = `<div class="answer-box" style="background:#fef2f2;border-color:#ef4444;">خطأ في الاتصال بالسيرفر</div>`;
+  }
+  btn.disabled = false;
+  loader.style.display = 'none';
+}
+</script>
+</body>
+</html>
+"""
 
-النص المرجعي المستخرج:
-{relevant_context}
+@app.route("/")
+def index():
+    logo_exists = os.path.exists("Logo.png") or os.path.exists("logo.png")
+    return render_template_string(HTML_TEMPLATE, logo_exists=logo_exists)
+
+@app.route("/logo.png")
+def logo():
+    if os.path.exists("Logo.png"):
+        return send_file("Logo.png", mimetype="image/png")
+    elif os.path.exists("logo.png"):
+        return send_file("logo.png", mimetype="image/png")
+    return "", 404
+
+@app.route("/ask", methods=["POST"])
+def ask():
+    data = request.get_json()
+    q = data.get("question", "").strip()
+    if not q:
+        return jsonify({"error": "يرجى كتابة السؤال"})
+    if not client:
+        return jsonify({"error": "مفتاح GROQ_API_KEY غير معرف في بيئة العمل"})
+    try:
+        chunks = read_all_chunks()
+        context = get_relevant_context(q, chunks)
+        prompt = f"""أنت مساعد آلي رسمي لوحدة شؤون الطلبة في كليات الرؤية بالرياض.
+
+التعليمات:
+1. أجب باللغة العربية المباشرة فقط.
+2. لا تكتب أي أفكار أو تحليلات باللغة الإنجليزية إطلاقاً.
+3. استخرج الإجابة بدقة من النص المرجعي المرفق.
+4. إذا سئلت عن عضو معين، اذكر اللجان أو الأنشطة المذكور فيها مع رقم القرار إن وجد.
+5. إذا لم تجد الإجابة، أجب بـ: "عذراً، لا توجد معلومات صريحة في المصادر المرفقة. يُرجى مراجعة وحدة شؤون الطلبة."
+
+النص المرجعي:
+{context}
 
 سؤال الطالب: {q}
 
-الإجابة النهائية (بالعربية فقط):"""
+الإجابة المباشرة (بالعربية فقط):"""
 
-            ans = ""
-            last_err = ""
+        completion = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": "أنت مساعد يجيب باللغة العربية المباشرة والواضحة فقط دون تفكير بالإنجليزية."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.1
+        )
+        raw_ans = completion.choices[0].message.content
+        ans = clean_llm_response(raw_ans)
+        return jsonify({"answer": ans})
+    except Exception as e:
+        return jsonify({"error": f"حدث خطأ في النظام: {str(e)}"})
 
-            try:
-                models_list = client.models.list().data
-                valid_models = [
-                    m.id for m in models_list 
-                    if not any(x in m.id for x in ["whisper", "safetensors", "canopylabs", "guard", "vision"])
-                ]
-
-                for model_name in valid_models:
-                    try:
-                        completion = client.chat.completions.create(
-                            model=model_name,
-                            messages=[
-                                {"role": "system", "content": "أنت مساعد آلي تجيب باللغة العربية المباشرة فقط دون تفكير بالإنجليزية."},
-                                {"role": "user", "content": prompt}
-                            ],
-                            temperature=0.1,
-                        )
-                        if completion and completion.choices:
-                            ans = completion.choices[0].message.content.strip()
-                            break
-                    except Exception as ex:
-                        last_err = str(ex)
-                        continue
-            except Exception as e:
-                last_err = str(e)
-
-            if not ans:
-                ans = f"عذراً، تعذر الاتصال بالذكاء الاصطناعي: {last_err}"
-
-            st.markdown(f"<div class='answer-box'>{ans}</div>", unsafe_allow_html=True)
-
-# 8. التنويه السفلي
-st.markdown("""
-<div class='disclaimer-box'>
-تنبيـه: هذا برنامج رد آلي ويمكن أن تكون الإجابات في بعض الأحيان غير دقيقة، وعليه تعتبر اللوائح والأنظمة الرسمية المستمدة والمعلنة عبر الرابط التالي هي المرجع المعتمد والأخير للكلية:<br>
-<a href='https://elearning.vision.edu.sa/course/view.php?id=788' target='_blank'>https://elearning.vision.edu.sa/course/view.php?id=788</a>
-</div>
-""", unsafe_allow_html=True)
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
