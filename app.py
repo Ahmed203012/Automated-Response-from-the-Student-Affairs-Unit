@@ -71,6 +71,7 @@ def read_all_chunks():
             try:
                 excel_file = pd.ExcelFile(file)
                 for sheet in excel_file.sheet_names:
+                    # قراءة حتى 3000 صف لضمان عدم تفويت أي اسم
                     df = pd.read_excel(file, sheet_name=sheet, nrows=3000).dropna(how='all')
                     lines = []
                     for _, row in df.iterrows():
@@ -223,10 +224,10 @@ def ask():
         chunks = read_all_chunks()
         context = get_relevant_context(q, chunks, max_chars=50000)
         
-        # النماذج الرسمية الحديثة من Gemini
+        # النماذج الرسمية الحديثة من Gemini (محدثة ومتوافقة مع الحسابات الجديدة)
         models_to_try = [
-            "gemini-2.5-flash",
-            "gemini-2.5-pro"
+            "gemini-3.8-flash",
+            "gemini-3.1-pro-preview"
         ]
         
         prompt = f"""أنت مساعد آلي رسمي لوحدة شؤون الطلبة في كليات الرؤية بالرياض.
