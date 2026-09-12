@@ -22,7 +22,6 @@ def normalize_arabic(text):
     return text.lower().strip()
 
 def clean_llm_response(text):
-    """ إزالة أي أفكار أو نصوص إنجليزية من الرد قبل العرض """
     if not text:
         return ""
     text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
@@ -43,7 +42,6 @@ def read_all_chunks():
         if file.startswith(".") or low in ["app.py", "requirements.txt"] or "venv" in low:
             continue
             
-        # قراءة ملفات PDF
         if low.endswith(".pdf"):
             try:
                 doc = pymupdf.open(file)
@@ -60,7 +58,6 @@ def read_all_chunks():
             except Exception:
                 pass
                 
-        # قراءة ملفات Word
         elif low.endswith(".docx"):
             try:
                 doc = Document(file)
@@ -70,7 +67,6 @@ def read_all_chunks():
             except Exception:
                 pass
                 
-        # قراءة ملفات Excel
         elif low.endswith((".xlsx", ".xls")):
             try:
                 excel_file = pd.ExcelFile(file)
@@ -140,7 +136,7 @@ body { background: #fafaf9; margin:0; padding:0; direction: rtl; text-align: rig
 .search-box { background: white; padding: 25px; border-radius: 16px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); margin-top:20px; }
 .search-box input { width:100%; padding:14px 16px; border:1.5px solid #e5e5e5; border-radius: 10px; font-size:16px; text-align:right; direction:rtl; }
 .search-box input:focus { outline:none; border-color:#8C7355; }
-.search-box button { width:100%; margin-top:15px; background:#8C7355; color:white; border:none; padding:13px; border-radius:10px; font-size:16px; font-weight:bold; cursor:pointer; transition: background 0.2s; }
+.search-box button { width:100%; margin-top:15px; background:#8C7355; color:white; border:none; padding:13px; border-radius:10px; font-size:16px; font-weight:bold; cursor:pointer; }
 .search-box button:hover { background:#6e5a42; }
 .answer-box { background:#f4f4f6; border-right:5px solid #8C7355; padding:20px; border-radius:10px; margin-top:20px; line-height:1.8; white-space: pre-wrap; font-size: 16px; color: #222; }
 .loader { text-align:center; padding:20px; display:none; color:#8C7355; font-weight:bold; }
@@ -231,11 +227,12 @@ def ask():
         chunks = read_all_chunks()
         context = get_relevant_context(q, chunks)
         
+        # نماذج Groq المتاحة حالياً على الخدمة
         models_to_try = [
             "llama-3.1-8b-instant",
+            "llama3-8b-8192",
             "gemma2-9b-it",
-            "mixtral-8x7b-32768",
-            "llama-3.3-70b-versatile"
+            "mixtral-8x7b-32768"
         ]
         
         prompt = f"""أنت مساعد آلي رسمي لوحدة شؤون الطلبة في كليات الرؤية بالرياض.
