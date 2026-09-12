@@ -71,19 +71,15 @@ def read_all_chunks():
             try:
                 excel_file = pd.ExcelFile(file)
                 for sheet in excel_file.sheet_names:
-                    # زيادة عدد الصفوف المقروءة من 100 إلى 1000
                     df = pd.read_excel(file, sheet_name=sheet, nrows=1000).dropna(how='all')
                     lines = []
                     for _, row in df.iterrows():
                         row_str = " | ".join([f"{col}: {val}" for col, val in row.items() if pd.notna(val)])
                         if row_str.strip():
-                            # زيادة حجم النص المسموح به لكل صف من 200 إلى 300 حرف
                             lines.append(row_str[:300])
-                        # زيادة عدد الصفوف المستخرجة من 30 إلى 150 صف
                         if len(lines) >= 150:
                             break
                     if lines:
-                        # زيادة الحجم الكلي لنص الشيت من 2000 إلى 4000 حرف
                         chunks.append({"source": f"{file} ({sheet})", "text": "\n".join(lines)[:4000]})
             except Exception:
                 pass
@@ -99,7 +95,7 @@ def read_all_chunks():
                 
     return chunks
 
-def get_relevant_context(query, chunks, max_chars=15000):
+def get_relevant_context(query, chunks, max_chars=8000):
     norm_query = normalize_arabic(query)
     stop_words = ["ما", "هي", "من", "في", "على", "عن", "التي", "الذي", "ماهي", "اين"]
     query_words = [w for w in norm_query.split() if len(w) > 2 and w not in stop_words]
@@ -222,19 +218,19 @@ def ask():
         data = request.get_json()
         q = data.get("question", "").strip()
         if not q:
-            return jsonify({"error": "يرجى كتابة السؤال"})
+            return jsonify({"error": "يرجى كتابة الس باسمؤال"})
         if not client:
             return jsonify({"error": "GROQ_API_KEY غير موجود في Render"})
             
         chunks = read_all_chunks()
-        context = get_relevant_context(q, chunks, max_chars=15000)
+        context = get_relevant_context(q, chunks, max_chars=8000)
         
-        # قائمة النماذج الرسمية النشطة حالياً على Groq (تم تحديثها)
+        # قائمة محدثة بنماذج Groq الرسمية والنشطة حالياً
         models_to_try = [
             "llama-3.3-70b-versatile",
             "llama-3.1-8b-instant",
-            "openai/gpt-oss-120b",
-            "openai/gpt-oss-20b"
+            "mixtral-8x7b-32768",
+            "gemma2-9b-it"
         ]
         
         prompt = f"""أنت مساعد آلي رسمي لوحدة شؤون الطلبة في كليات الرؤية بالرياض.
@@ -243,8 +239,9 @@ def ask():
 1. أجب باللغة العربية المباشرة والواضحة فقط.
 2. لا تكتب أي تفكير أو جمل إنجليزية.
 3. استخرج الإجابة بدقة وبإيجاز من النص المرجعي.
-4. ركز جيداً على الأسماء والإيميلات وأرقام التواصل إن وجدت في النص المرجعي.
-5. إذا لم تجد الإجابة، أجب بـ: "عذراً، لا توجد معلومات صريحة في المصادر المرفقة. يُرجى مراجعة وحدة شؤون الطلبة."
+4. إذا سأل الطالب عن شخص (مثل أحمد مرسي) ولجانه أو وحداته، اذكر كل اللجان التي وردته في النص المرجعي دون استثناء.
+5. ركز جيداً على الأسماء والإيميلات وأرقام التواصل إن وجدت في النص المرجعي.
+6. إذا لم تجد الإجابة، أجب بـ: "عذراً، لا توجد معلومات صريحة في المصادر المرفقة. يُرجى مراجعة وحدة شؤون الطلبة."
 
 النص المرجعي:
 {context}
@@ -263,7 +260,7 @@ def ask():
                         {"role": "user", "content": prompt}
                     ],
                     temperature=0.1,
-                    max_tokens=800
+                    max_tokens=1024
                 )
                 raw_ans = completion.choices[0].message.content.strip()
                 ans = clean_llm_response(raw_ans)
