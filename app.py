@@ -2,7 +2,7 @@ import os
 import re
 from flask import Flask, request, render_template_string, jsonify, send_file
 from functools import lru_cache
-import pymupdf  # المكتبة الحديثة والخفيفة لقراءة PDF
+import pymupdf
 from docx import Document
 import pandas as pd
 from groq import Groq
@@ -22,7 +22,7 @@ def normalize_arabic(text):
     return text.lower().strip()
 
 def clean_llm_response(text):
-    """ إزالة أي نصوص تفكير إنجليزية قبل عرض الإجابة للعميل """
+    """ إزالة أي أفكار أو نصوص إنجليزية من الرد قبل العرض """
     if not text:
         return ""
     text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
@@ -43,7 +43,7 @@ def read_all_chunks():
         if file.startswith(".") or low in ["app.py", "requirements.txt"] or "venv" in low:
             continue
             
-        # قراءة PDF
+        # قراءة ملفات PDF
         if low.endswith(".pdf"):
             try:
                 doc = pymupdf.open(file)
@@ -60,7 +60,7 @@ def read_all_chunks():
             except Exception:
                 pass
                 
-        # قراءة Word
+        # قراءة ملفات Word
         elif low.endswith(".docx"):
             try:
                 doc = Document(file)
@@ -70,7 +70,7 @@ def read_all_chunks():
             except Exception:
                 pass
                 
-        # قراءة Excel
+        # قراءة ملفات Excel
         elif low.endswith((".xlsx", ".xls")):
             try:
                 excel_file = pd.ExcelFile(file)
@@ -140,7 +140,7 @@ body { background: #fafaf9; margin:0; padding:0; direction: rtl; text-align: rig
 .search-box { background: white; padding: 25px; border-radius: 16px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); margin-top:20px; }
 .search-box input { width:100%; padding:14px 16px; border:1.5px solid #e5e5e5; border-radius: 10px; font-size:16px; text-align:right; direction:rtl; }
 .search-box input:focus { outline:none; border-color:#8C7355; }
-.search-box button { width:100%; margin-top:15px; background:#8C7355; color:white; border:none; padding:13px; border-radius:10px; font-size:16px; font-weight:bold; cursor:pointer; }
+.search-box button { width:100%; margin-top:15px; background:#8C7355; color:white; border:none; padding:13px; border-radius:10px; font-size:16px; font-weight:bold; cursor:pointer; transition: background 0.2s; }
 .search-box button:hover { background:#6e5a42; }
 .answer-box { background:#f4f4f6; border-right:5px solid #8C7355; padding:20px; border-radius:10px; margin-top:20px; line-height:1.8; white-space: pre-wrap; font-size: 16px; color: #222; }
 .loader { text-align:center; padding:20px; display:none; color:#8C7355; font-weight:bold; }
@@ -158,8 +158,8 @@ body { background: #fafaf9; margin:0; padding:0; direction: rtl; text-align: rig
 </div>
 
 <div class="search-box">
-<input type="text" id="q" placeholder="مثال: ما هي اللجان التي بها أحمد مرسي؟" onkeypress="if(event.key==='Enter') ask()">
-<button id="btn" onclick="ask()">اضغط هنا للحصول على الإجابة</button>
+<input type="text" id="q" placeholder="مثال: من هو وكيل الكلية؟" onkeypress="if(event.key==='Enter') ask()">
+<button id="btn" onclick="ask()">للرد على استفسارك اضغط هنا</button>
 <div class="loader" id="loader">جاري البحث في اللوائح والقرارات...</div>
 <div id="answer"></div>
 </div>
@@ -226,20 +226,24 @@ def ask():
         if not q:
             return jsonify({"error": "يرجى كتابة السؤال"})
         if not client:
-            return jsonify({"error": "مفتاح GROQ_API_KEY غير موجود في Render"})
+            return jsonify({"error": "GROQ_API_KEY غير موجود في Render"})
             
         chunks = read_all_chunks()
         context = get_relevant_context(q, chunks)
         
-        models_to_try = ["llama-3.3-70b-versatile", "llama3-8b-8192", "llama-3.1-8b-instant", "mixtral-8x7b-32768"]
-        last_err = ""
+        models_to_try = [
+            "llama-3.1-8b-instant",
+            "gemma2-9b-it",
+            "mixtral-8x7b-32768",
+            "llama-3.3-70b-versatile"
+        ]
         
         prompt = f"""أنت مساعد آلي رسمي لوحدة شؤون الطلبة في كليات الرؤية بالرياض.
 
 التعليمات:
 1. أجب باللغة العربية المباشرة والواضحة فقط.
-2. لا تفكر ولا تكتب أي جمل باللغة الإنجليزية.
-3. إذا سئلت عن عضو معين، اذكر اللجان أو القرارات المذكور فيها بوضوح.
+2. لا تكتب أي تفكير أو جمل إنجليزية.
+3. استخرج الإجابة بدقة وبإيجاز من النص المرجعي.
 4. إذا لم تجد الإجابة، أجب بـ: "عذراً، لا توجد معلومات صريحة في المصادر المرفقة. يُرجى مراجعة وحدة شؤون الطلبة."
 
 النص المرجعي:
@@ -249,6 +253,7 @@ def ask():
 
 الإجابة المباشرة:"""
 
+        last_err = ""
         for model_name in models_to_try:
             try:
                 completion = client.chat.completions.create(
@@ -268,9 +273,9 @@ def ask():
                 last_err = str(e)
                 continue
                 
-        return jsonify({"error": f"تعذر الاتصال بكافة النماذج. آخر خطأ: {last_err[:300]}"})
+        return jsonify({"error": f"تعذر الاتصال بكافة النماذج. آخر خطأ: {last_err[:400]}"})
     except Exception as e:
-        return jsonify({"error": f"خطأ داخلي: {str(e)[:400]}"})
+        return jsonify({"error": f"خطأ داخلي: {str(e)[:500]}"})
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
