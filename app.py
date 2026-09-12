@@ -22,6 +22,7 @@ def normalize_arabic(text):
     return text.lower().strip()
 
 def clean_llm_response(text):
+    """ تنظيف الرد من أفكار النموذج واللغة الإنجليزية """
     if not text:
         return ""
     text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
@@ -227,7 +228,7 @@ def ask():
         chunks = read_all_chunks()
         context = get_relevant_context(q, chunks)
         
-        # نماذج Groq المتاحة حالياً على الخدمة
+        # النماذج الرسمية الشغالة والمتاحة حالياً على Groq
         models_to_try = [
             "llama-3.1-8b-instant",
             "llama3-8b-8192",
