@@ -71,16 +71,18 @@ def read_all_chunks():
             try:
                 excel_file = pd.ExcelFile(file)
                 for sheet in excel_file.sheet_names:
-                    df = pd.read_excel(file, sheet_name=sheet, nrows=1000).dropna(how='all')
+                    # زيادة عدد الصفوف المقروءة إلى 500
+                    df = pd.read_excel(file, sheet_name=sheet, nrows=500).dropna(how='all')
                     lines = []
                     for _, row in df.iterrows():
                         row_str = " | ".join([f"{col}: {val}" for col, val in row.items() if pd.notna(val)])
                         if row_str.strip():
-                            lines.append(row_str[:300])
-                        if len(lines) >= 150:
+                            lines.append(row_str[:400])
+                        if len(lines) >= 300:
                             break
                     if lines:
-                        chunks.append({"source": f"{file} ({sheet})", "text": "\n".join(lines)[:4000]})
+                        # زيادة الحجم الأقصى لنص الشيت إلى 8000 حرف
+                        chunks.append({"source": f"{file} ({sheet})", "text": "\n".join(lines)[:8000]})
             except Exception:
                 pass
                 
@@ -95,7 +97,7 @@ def read_all_chunks():
                 
     return chunks
 
-def get_relevant_context(query, chunks, max_chars=8000):
+def get_relevant_context(query, chunks, max_chars=15000):
     norm_query = normalize_arabic(query)
     stop_words = ["ما", "هي", "من", "في", "على", "عن", "التي", "الذي", "ماهي", "اين"]
     query_words = [w for w in norm_query.split() if len(w) > 2 and w not in stop_words]
@@ -103,7 +105,7 @@ def get_relevant_context(query, chunks, max_chars=8000):
     scored = []
     for item in chunks:
         score = 0
-        norm_text = normalize_arabic(item["text"])
+ **        norm_text = normalize_arabic(item["text"])
         for w in query_words:
             if w in norm_text:
                 score += 2
@@ -115,7 +117,8 @@ def get_relevant_context(query, chunks, max_chars=8000):
     scored.sort(key=lambda x: x[0], reverse=True)
     
     selected = ""
-    for _, item in scored[:10]:
+    # زيادة عدد الأجزاء المختارة إلى 15 جزءاً لضمان جمع كل اللجان
+    for _, item in scored[:15]:
         entry = f"المصدر [{item['source']}]:\n{item['text']}\n\n"
         if len(selected) + len(entry) <= max_chars:
             selected += entry
@@ -223,9 +226,8 @@ def ask():
             return jsonify({"error": "GROQ_API_KEY غير موجود في Render"})
             
         chunks = read_all_chunks()
-        context = get_relevant_context(q, chunks, max_chars=8000)
+        context = get_relevant_context(q, chunks, max_chars=15000)
         
-        # قائمة محدثة بالنماذج الرسمية النشطة حالياً على Groq (تم إصلاحها)
         models_to_try = [
             "llama-3.3-70b-versatile",
             "llama-3.1-8b-instant",
@@ -233,13 +235,14 @@ def ask():
             "openai/gpt-oss-20b"
         ]
         
+        # تم تحسين التعليمات لضمان ذكر جميع اللجان
         prompt = f"""أنت مساعد آلي رسمي لوحدة شؤون الطلبة في كليات الرؤية بالرياض.
 
 التعليمات:
 1. أجب باللغة العربية المباشرة والواضحة فقط.
 2. لا تكتب أي تفكير أو جمل إنجليزية.
 3. استخرج الإجابة بدقة وبإيجاز من النص المرجعي.
-4. إذا سأل الطالب عن شخص (مثل أحمد مرسي) ولجانه أو وحداته، اذكر كل اللجان التي وردت باسمه في النص المرجعي دون استثناء.
+4. إذا سأل الطالب عن شخص (مثل أحمد مرسي) ولجانه أو وحداته، يجب عليك ذكركل اللجان** التي وردت باسمه في النص المرجعي دون استثناء. ابحث في جميع السطور والأجزاء.
 5. ركز جيداً على الأسماء والإيميلات وأرقام التواصل إن وجدت في النص المرجعي.
 6. إذا لم تجد الإجابة، أجب بـ: "عذراً، لا توجد معلومات صريحة في المصادر المرفقة. يُرجى مراجعة وحدة شؤون الطلبة."
 
