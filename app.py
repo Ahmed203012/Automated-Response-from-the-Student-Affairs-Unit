@@ -1,6 +1,7 @@
 import os
 import re
-from flask import Flask, request, render_template_string, jsonify
+import base64
+from flask import Flask, request, render_template_string, jsonify, send_from_directory
 from functools import lru_cache
 import pymupdf
 from docx import Document
@@ -18,6 +19,19 @@ app = Flask(__name__)
 # إعداد Groq Client
 api_key = os.environ.get("GROQ_API_KEY")
 client = Groq(api_key=api_key) if api_key else None
+
+def get_logo_base64():
+    """تحويل صورة اللوجو إلى Base64 لضمان ظهورها دائماً دون مشاكل مسارات"""
+    for fname in ["logo.png", "logo.jpg", "logo.jpeg"]:
+        if os.path.exists(fname):
+            try:
+                with open(fname, "rb") as f:
+                    encoded = base64.b64encode(f.read()).decode('utf-8')
+                    ext = fname.split('.')[-1]
+                    return f"data:image/{ext};base64,{encoded}"
+            except Exception:
+                pass
+    return "logo.png"
 
 def normalize_arabic(text):
     if not text:
@@ -141,7 +155,6 @@ body { background: #fafaf9; margin:0; padding:0; direction: rtl; text-align: rig
 .search-box button:hover { background:#6e5a42; }
 .answer-box { background:#f4f4f6; border-right:5px solid #8C7355; padding:20px; border-radius:10px; margin-top:20px; line-height:1.8; white-space: pre-wrap; font-size: 16px; color: #222; }
 .loader { text-align:center; padding:20px; display:none; color:#8C7355; font-weight:bold; }
-/* تنسيق مستطيل التنبيه المحدث */
 .disclaimer-box { 
     background-color: #f4f4f6; 
     color: #222; 
@@ -174,21 +187,21 @@ body { background: #fafaf9; margin:0; padding:0; direction: rtl; text-align: rig
 <body>
 <div class="container">
 <div class="header">
-<!-- إظهار اللوجو -->
-<img src="logo.png" alt="شعار كليات الرؤية" onerror="this.onerror=null; this.src='logo.jpg';">
+<!-- الشعار بخاصية التحميل المباشر -->
+<img src="{{ logo_src }}" alt="شعار كليات الرؤية">
 <h1>كليات الرؤية - Vision Colleges</h1>
 <h2>الاستفسار الآلي - وحدة شؤون الطلبة</h2>
 <p>مرحباً بكم في كلية الرؤية بالرياض، نرحب باستفساراتكم حول لوائح وأنظمة الكلية.</p>
 </div>
 
 <div class="search-box">
-<input type="text" id="q" placeholder="مثال: ما هي أنشطة شهر أكتوبر؟ أو من هو وكيل الكلية؟" onkeypress="if(event.key==='Enter') ask()">
+<!-- تم تعديل نص التلميح هنا -->
+<input type="text" id="q" placeholder="اكتب استفسارك هنا..." onkeypress="if(event.key==='Enter') ask()">
 <button id="btn" onclick="ask()">للرد على استفسارك اضغط هنا</button>
 <div class="loader" id="loader">جاري البحث في اللوائح والقرارات...</div>
 <div id="answer"></div>
 </div>
 
-<!-- مستطيل التنبيه المحدث بعد إضافة كلمة تنويه وتعديل الرابط -->
 <div class="disclaimer-box">
     <span class="disclaimer-title">تنويه</span>
     <p style="margin: 0 0 8px 0;">هذا المساعد برنامج آلي يهدف إلى تقديم معلومات وإرشادات للطلاب، وقد لا تكون جميع إجاباته دقيقة أو محدثة بشكل كامل. لذلك، لا تُعد إجابات المساعد الآلي مرجعًا رسميًا أو ملزمًا للكلية.</p>
@@ -236,7 +249,14 @@ async function ask(){
 
 @app.route("/")
 def index():
-    return render_template_string(HTML_TEMPLATE)
+    logo_src = get_logo_base64()
+    return render_template_string(HTML_TEMPLATE, logo_src=logo_src)
+
+@app.route("/<path:filename>")
+def serve_static(filename):
+    if filename in ["logo.png", "logo.jpg", "logo.jpeg"]:
+        return send_from_directory(".", filename)
+    return "Not Found", 404
 
 @app.route("/ask", methods=["POST"])
 def ask():
