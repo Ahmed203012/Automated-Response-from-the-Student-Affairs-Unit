@@ -77,15 +77,15 @@ def read_all_chunks():
                     try:
                         text = page.get_text("text")
                         if text and len(text.strip()) > 20:
-                            chunks.append({"source": f"{file} (ص {i+1})", "text": text[:3000]})
+                            chunks.append({"source": f"{file} (ص {i+1})", "text": text[:2500]})
                     except:
                         continue
                 doc.close()
             elif low.endswith(".docx"):
                 doc = Document(file)
-                txt = "\n".join([p.text for p in doc.paragraphs if p.text.strip()][:150])
+                txt = "\n".join([p.text for p in doc.paragraphs if p.text.strip()][:100])
                 if txt:
-                    chunks.append({"source": file, "text": txt[:3000]})
+                    chunks.append({"source": file, "text": txt[:2500]})
             elif low.endswith((".xlsx", ".xls")):
                 excel_file = pd.ExcelFile(file)
                 for sheet in excel_file.sheet_names:
@@ -101,15 +101,15 @@ def read_all_chunks():
                 with open(file, 'r', encoding='utf-8') as f:
                     txt = f.read()
                     if txt and len(txt.strip()) > 20:
-                        chunks.append({"source": file, "text": txt[:3000]})
+                        chunks.append({"source": file, "text": txt[:2500]})
         except Exception as file_err:
             print(f"Error reading file {file}: {file_err}")
             continue
                 
     return chunks
 
-def get_relevant_context(query, chunks, max_chars=30000):
-    """استخراج أفضل النصوص المرجعية المرتبطة بسؤال الطالب (تم زيادة الحجم بشكل كبير)"""
+def get_relevant_context(query, chunks, max_chars=6000):
+    """استخراج أفضل النصوص المرجعية المرتبطة بسؤال الطالب (تم ضبط الحجم ليتناسب مع حدود حسابك)"""
     norm_query = normalize_arabic(query)
     stop_words = ["ما", "هي", "من", "في", "على", "عن", "التي", "الذي", "ماهي", "اين", "اللجان", "الوحدات"]
     query_words = [w for w in norm_query.split() if len(w) > 2 and w not in stop_words]
@@ -120,30 +120,27 @@ def get_relevant_context(query, chunks, max_chars=30000):
         norm_text = normalize_arabic(item["text"])
         for w in query_words:
             if w in norm_text:
-                score += 5 # زيادة وزن الكلمة المطابقة
+                score += 5
         if norm_query in norm_text:
-            score += 30 # زيادة وزن التطابق الدقيق
-        # إذا كان السؤال يحتوي على اسم علم (كلمة تبدأ بـ "د." أو "أ." أو اسم شخص)
+            score += 30
         if any(name_part in query for name_part in ["د.", "أ.", "الدكتور", "الأستاذ", "دكتور", "استاذ"]):
-            # البحث عن مطابقة دقيقة لأسماء الأشخاص في النص
             name_matches = re.findall(r'(?:د\.|أ\.)\s*[\u0600-\u06FF]+(?:\s+[\u0600-\u06FF]+)*', query)
             for match in name_matches:
                 if match in item["text"]:
-                    score += 50 # إعطاء أولوية قصوى لأسماء الأشخاص
+                    score += 50
         if score > 0:
             scored.append((score, item))
             
     scored.sort(key=lambda x: x[0], reverse=True)
     
     selected = ""
-    # زيادة عدد الأجزاء المستخرجة لضمان شمولية المعلومات
-    for _, item in scored[:20]:
+    for _, item in scored[:10]: # تم تقليل عدد الأجزاء لتناسب حد التوكنات
         entry = f"المصدر [{item['source']}]:\n{item['text']}\n\n"
         if len(selected) + len(entry) <= max_chars:
             selected += entry
             
     if not selected and chunks:
-        selected = "\n".join([c["text"][:1000] for c in chunks[:5]])
+        selected = "\n".join([c["text"][:500] for c in chunks[:3]])
         
     return selected
 
@@ -283,12 +280,13 @@ def ask():
             return jsonify({"error": "GROQ_API_KEY غير موجود في إعدادات البيئة"})
             
         chunks = read_all_chunks()
-        context = get_relevant_context(q, chunks, max_chars=30000) # زيادة حجم السياق
+        context = get_relevant_context(q, chunks, max_chars=6000)
         
+        # تم تحديث النماذج لتتوافق مع حسابك في Groq حسب الصورة
         models_to_try = [
-            "llama-3.3-70b-versatile",
-            "allam-2-7b",
-            "llama3-70b-8192"
+            "allam-2-7b",           # نموذج عربي جيد
+            "openai/gpt-oss-120b",  # نموذج قوي (حد توكنات منخفض)
+            "groq/compound"         # نموذج بحد توكنات مرتفع جداً
         ]
         
         prompt = f"""أنت مساعد آلي رسمي لوحدة شؤون الطلبة في كليات الرؤية بالرياض.
@@ -298,7 +296,7 @@ def ask():
 2. اعتمد كلياً على النصوص والقرارات المرفقة في السياق المرجعي.
 3. عند الاستفسار عن اسم شخص (مثل: "د. أحمد مرسي" أو "أ. ملاذ") أو عن لجانه أو وحداته:
    - يجب عليك البحث عن هذا الاسم في **كافة أجزاء السياق المرجعي** المرفق.
-   - ثم قم بجمع **كل** اللجان أو الوحدات التي ورد فيها هذا الاسم (مثل: لجنة الأعذار، وحدة البحث العلمي، لجنة الاختبارات، إلخ) واذكرها في قائمة واضحة.
+   - ثم قم بجمع **كل** اللجان أو الوحدات التي ورد فيها هذا الاسم واذكرها في قائمة واضحة.
    - لا تكتفِ بذكر لجنة واحدة فقط، بل اذكر جميع اللجان التي تم العثور عليها.
 4. عند الاستفسار عن الأنشطة الطلابية لشهر معين، يجب تجميع كافة الأنشطة من جميع اللجان. ويمنع منعاً باتاً ذكر أي ميزانيات أو مبالغ مالية.
 5. لا تكرر إجابتك، واكتبها مرة واحدة فقط في نهاية الرد.
@@ -321,7 +319,7 @@ def ask():
                         {"role": "user", "content": prompt}
                     ],
                     temperature=0.1,
-                    max_tokens=1500
+                    max_tokens=1200
                 )
                 raw_ans = completion.choices[0].message.content.strip()
                 ans = clean_llm_response(raw_ans)
