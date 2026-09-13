@@ -1,6 +1,7 @@
 import os
 import re
 import base64
+import random
 from flask import Flask, request, render_template_string, jsonify, send_from_directory
 from functools import lru_cache
 import pymupdf
@@ -16,9 +17,15 @@ except ImportError:
 
 app = Flask(__name__)
 
-# إعداد Groq Client
-api_key = os.environ.get("GROQ_API_KEY")
-client = Groq(api_key=api_key) if api_key else None
+# --- إعداد مفاتيح Groq المتعددة (تدوير المفاتيح) ---
+# نقرأ قائمة المفاتيح من متغير بيئة واحد مفصول بفواصل
+api_keys_str = os.environ.get("GROQ_API_KEYS", "")
+# إذا لم يوجد، نعود للمفتاح القديم الفردي كخيار احتياطي
+if not api_keys_str:
+    single_key = os.environ.get("GROQ_API_KEY")
+    api_keys = [single_key] if single_key else []
+else:
+    api_keys = [key.strip() for key in api_keys_str.split(',') if key.strip()]
 
 def get_logo_base64():
     """تحويل صورة اللوجو إلى Base64 لضمان ظهورها دائماً دون مشاكل مسارات"""
@@ -265,8 +272,14 @@ def ask():
         q = data.get("question", "").strip()
         if not q:
             return jsonify({"error": "يرجى كتابة السؤال"})
-        if not client:
-            return jsonify({"error": "GROQ_API_KEY غير موجود في Render"})
+            
+        # التحقق من وجود مفاتيح API
+        if not api_keys:
+            return jsonify({"error": "لا توجد مفاتيح GROQ_API_KEYS في إعدادات البيئة"})
+        
+        # اختيار مفتاح عشوائي من القائمة (تدوير المفاتيح لتوزيع الحمل)
+        current_api_key = random.choice(api_keys)
+        client = Groq(api_key=current_api_key)
             
         chunks = read_all_chunks()
         context = get_relevant_context(q, chunks)
