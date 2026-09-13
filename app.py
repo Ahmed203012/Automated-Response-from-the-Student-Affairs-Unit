@@ -40,7 +40,6 @@ def clean_llm_response(text):
 
 @lru_cache(maxsize=1)
 def read_all_chunks():
-    # قراءة البيانات المضمنة أولاً
     chunks = list(HARDCODED_DATA)
     
     for file in os.listdir("."):
@@ -88,7 +87,7 @@ def read_all_chunks():
                 
     return chunks
 
-def get_relevant_context(query, chunks, max_chars=12000):
+def get_relevant_context(query, chunks, max_chars=14000):
     norm_query = normalize_arabic(query)
     stop_words = ["ما", "هي", "من", "في", "على", "عن", "التي", "الذي", "ماهي", "اين", "اللجان", "الوحدات"]
     query_words = [w for w in norm_query.split() if len(w) > 2 and w not in stop_words]
@@ -108,7 +107,7 @@ def get_relevant_context(query, chunks, max_chars=12000):
     scored.sort(key=lambda x: x[0], reverse=True)
     
     selected = ""
-    for _, item in scored[:10]:
+    for _, item in scored[:12]:
         entry = f"المصدر [{item['source']}]:\n{item['text']}\n\n"
         if len(selected) + len(entry) <= max_chars:
             selected += entry
@@ -131,6 +130,7 @@ HTML_TEMPLATE = """
 body { background: #fafaf9; margin:0; padding:0; direction: rtl; text-align: right; }
 .container { max-width: 800px; margin: 0 auto; padding: 30px 20px; }
 .header { text-align:center; padding: 20px 0; }
+.header img { max-height: 110px; width: auto; margin-bottom: 15px; display: inline-block; }
 .header h1 { font-size: 26px; margin:10px 0 5px; color: #1a1a1a; }
 .header h2 { font-size: 18px; color: #8C7355; margin:0; }
 .header p { color: #666; font-size: 15px; margin-top:10px; }
@@ -141,17 +141,24 @@ body { background: #fafaf9; margin:0; padding:0; direction: rtl; text-align: rig
 .search-box button:hover { background:#6e5a42; }
 .answer-box { background:#f4f4f6; border-right:5px solid #8C7355; padding:20px; border-radius:10px; margin-top:20px; line-height:1.8; white-space: pre-wrap; font-size: 16px; color: #222; }
 .loader { text-align:center; padding:20px; display:none; color:#8C7355; font-weight:bold; }
-/* تنسيق مستطيل التنبيه الجديد */
+/* تنسيق مستطيل التنبيه المحدث */
 .disclaimer-box { 
     background-color: #f4f4f6; 
     color: #222; 
-    padding: 15px; 
+    padding: 20px; 
     border-radius: 10px; 
     margin-top: 30px; 
-    font-size: 12px; 
-    line-height: 1.6; 
+    font-size: 13px; 
+    line-height: 1.7; 
     text-align: right;
     border-right: 5px solid #8C7355;
+}
+.disclaimer-title {
+    font-size: 16px;
+    font-weight: bold;
+    color: #8C7355;
+    margin-bottom: 8px;
+    display: block;
 }
 .disclaimer-box a { 
     color: #8C7355; 
@@ -167,26 +174,27 @@ body { background: #fafaf9; margin:0; padding:0; direction: rtl; text-align: rig
 <body>
 <div class="container">
 <div class="header">
-<!-- إضافة اللوجو هنا -->
-<img src="logo.png" alt="شعار كليات الرؤية" style="max-height: 100px; margin-bottom: 15px;">
+<!-- إظهار اللوجو -->
+<img src="logo.png" alt="شعار كليات الرؤية" onerror="this.onerror=null; this.src='logo.jpg';">
 <h1>كليات الرؤية - Vision Colleges</h1>
 <h2>الاستفسار الآلي - وحدة شؤون الطلبة</h2>
 <p>مرحباً بكم في كلية الرؤية بالرياض، نرحب باستفساراتكم حول لوائح وأنظمة الكلية.</p>
 </div>
 
 <div class="search-box">
-<input type="text" id="q" placeholder="مثال: من هو وكيل الكلية؟" onkeypress="if(event.key==='Enter') ask()">
+<input type="text" id="q" placeholder="مثال: ما هي أنشطة شهر أكتوبر؟ أو من هو وكيل الكلية؟" onkeypress="if(event.key==='Enter') ask()">
 <button id="btn" onclick="ask()">للرد على استفسارك اضغط هنا</button>
 <div class="loader" id="loader">جاري البحث في اللوائح والقرارات...</div>
 <div id="answer"></div>
 </div>
 
-<!-- مستطيل التنبيه الجديد بالنص المطلوب -->
+<!-- مستطيل التنبيه المحدث بعد إضافة كلمة تنويه وتعديل الرابط -->
 <div class="disclaimer-box">
-    <p>هذا المساعد برنامج آلي يهدف إلى تقديم معلومات وإرشادات للطلاب، وقد لا تكون جميع إجاباته دقيقة أو محدثة بشكل كامل. لذلك، لا تُعد إجابات المساعد الآلي مرجعًا رسميًا أو ملزمًا للكلية.</p>
-    <p>ويُعد المرجع الرسمي والمعتمد لجميع اللوائح والأنظمة والتعليمات الأكاديمية هو ما يتم نشره عبر الرابط الرسمي للكلية أدناه:</p>
-    <p><a href="https://elearning.vision.edu.sa/course/view.php?id=788" target="_blank">https://elearning.vision.edu.sa/course/view.php?id=788</a></p>
-    <p>وفي حال وجود أي تعارض بين إجابة المساعد وما هو منشور في الرابط الرسمي، يُعتد بما ورد في الرابط الرسمي للكلية.</p>
+    <span class="disclaimer-title">تنويه</span>
+    <p style="margin: 0 0 8px 0;">هذا المساعد برنامج آلي يهدف إلى تقديم معلومات وإرشادات للطلاب، وقد لا تكون جميع إجاباته دقيقة أو محدثة بشكل كامل. لذلك، لا تُعد إجابات المساعد الآلي مرجعًا رسميًا أو ملزمًا للكلية.</p>
+    <p style="margin: 0 0 8px 0;">ويُعد المرجع الرسمي والمعتمد لجميع اللوائح والأنظمة والتعليمات الأكاديمية هو ما يتم نشره عبر الرابط الرسمي للكلية أدناه:</p>
+    <p style="margin: 0 0 8px 0;"><a href="https://elearning.vision.edu.sa/course/view.php?id=188" target="_blank">https://elearning.vision.edu.sa/course/view.php?id=188</a></p>
+    <p style="margin: 0;">وفي حال وجود أي تعارض بين إجابة المساعد وما هو منشور في الرابط الرسمي، يُعتد بما ورد في الرابط الرسمي للكلية.</p>
 </div>
 
 </div>
@@ -243,7 +251,6 @@ def ask():
         chunks = read_all_chunks()
         context = get_relevant_context(q, chunks)
         
-        # قائمة النماذج النشطة والمستقرة حالياً على Groq
         models_to_try = [
             "llama-3.3-70b-versatile",
             "mixtral-8x7b-32768",
@@ -252,12 +259,13 @@ def ask():
         
         prompt = f"""أنت مساعد آلي رسمي لوحدة شؤون الطلبة في كليات الرؤية بالرياض.
 
-التعليمات:
-1. أجب باللغة العربية المباشرة والواضحة فقط، وبإيجاز.
-2. لا تكتب أي تفكير أو جمل إنجليزية.
-3. استخرج الإجابة بدقة من النص المرجعي.
-4. إذا سأل الطالب عن اسم شخص (مثل "ملاذ" أو "أحمد مرسي") أو عن لجانه ووحداته، اذكر كل اللجان التي ورد فيها هذا الاسم في النص المرجعي.
-5. إذا لم تجد الإجابة، أجب بـ: "عذراً، لا توجد معلومات صريحة في المصادر المرفقة. يُرجى مراجعة وحدة شؤون الطلبة."
+التعليمات الهامة جداً:
+1. أجب باللغة العربية المباشرة والواضحة فقط.
+2. عند السؤال عن "الأنشطة الطلابية" لـ (شهر معين كـ أكتوبر، نوفمبر، إلخ) أو في لجنة محددة:
+   - اذكر كافة الأنشطة والفعاليات المذكورة لهذا الشهر بالكامل في النص المرجعي دون حذف أي نشاط.
+   - يمنع منعاً باتاً ذكر أي ميزانية مالية أو مبالغ بالريال السعودي نهائياً؛ اكتب الفعالية وتفاصيلها أو مكانها فقط بدون الميزانية.
+3. استخرج الإجابات بدقة من النص المرجعي المرفق.
+4. إذا لم تجد الإجابة، أجب بـ: "عذراً، لا توجد معلومات صريحة في المصادر المرفقة. يُرجى مراجعة وحدة شؤون الطلبة."
 
 النص المرجعي:
 {context}
@@ -272,11 +280,11 @@ def ask():
                 completion = client.chat.completions.create(
                     model=model_name,
                     messages=[
-                        {"role": "system", "content": "أنت مساعد يجيب باللغة العربية المباشرة فقط."},
+                        {"role": "system", "content": "أنت مساعد يجيب باللغة العربية المباشرة فقط بكل دقة."},
                         {"role": "user", "content": prompt}
                     ],
                     temperature=0.1,
-                    max_tokens=1024
+                    max_tokens=1500
                 )
                 raw_ans = completion.choices[0].message.content.strip()
                 ans = clean_llm_response(raw_ans)
