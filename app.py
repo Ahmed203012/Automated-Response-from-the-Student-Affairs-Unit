@@ -275,9 +275,9 @@ def ask():
         context = get_relevant_context(q, chunks)
         
         models_to_try = [
+            "allam-2-7b",
             "llama-3.3-70b-versatile",
-            "mixtral-8x7b-32768",
-            "openai/gpt-oss-120b"
+            "mixtral-8x7b-32768"
         ]
         
         prompt = f"""أنت مساعد آلي رسمي لوحدة شؤون الطلبة في كليات الرؤية بالرياض.
