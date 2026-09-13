@@ -8,7 +8,7 @@ from docx import Document
 import pandas as pd
 from groq import Groq
 
-# --- استيراد ملف البيانات الثابتة ---
+# استيراد البيانات الثابتة من قاعدة المعرفة
 try:
     from knowledge_base import HARDCODED_DATA
 except ImportError:
@@ -16,12 +16,12 @@ except ImportError:
 
 app = Flask(__name__)
 
-# إعداد Groq Client
+# إعداد العميل لخدمة Groq API
 api_key = os.environ.get("GROQ_API_KEY")
 client = Groq(api_key=api_key) if api_key else None
 
 def get_logo_base64():
-    """تحويل صورة اللوجو إلى Base64 لضمان ظهورها دائماً دون مشاكل مسارات"""
+    """تحويل صورة الشعار إلى Base64 للعرض المباشر"""
     for fname in ["logo.png", "logo.jpg", "logo.jpeg"]:
         if os.path.exists(fname):
             try:
@@ -34,6 +34,7 @@ def get_logo_base64():
     return "logo.png"
 
 def normalize_arabic(text):
+    """توحيد وتنظيف النصوص العربية للبحث"""
     if not text:
         return ""
     text = str(text)
@@ -42,8 +43,10 @@ def normalize_arabic(text):
     return text.lower().strip()
 
 def clean_llm_response(text):
+    """تنظيف وتنسيق إجابة النموذج"""
     if not text:
         return ""
+    # إزالة التفكير الداخلي للنموذج إن وجد
     text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
     if "Here's" in text or "Analyze User Input" in text:
         match = re.search(r'[\u0600-\u06FF].*', text, re.DOTALL)
@@ -54,6 +57,7 @@ def clean_llm_response(text):
 
 @lru_cache(maxsize=1)
 def read_all_chunks():
+    """قراءة وتحميل جميع النصوص من الملف الثابت والمستندات المحلية"""
     chunks = list(HARDCODED_DATA)
     
     for file in os.listdir("."):
@@ -101,7 +105,8 @@ def read_all_chunks():
                 
     return chunks
 
-def get_relevant_context(query, chunks, max_chars=14000):
+def get_relevant_context(query, chunks, max_chars=16000):
+    """استخراج أفضل النصوص المرجعية المرتبطة بسؤال الطالب"""
     norm_query = normalize_arabic(query)
     stop_words = ["ما", "هي", "من", "في", "على", "عن", "التي", "الذي", "ماهي", "اين", "اللجان", "الوحدات"]
     query_words = [w for w in norm_query.split() if len(w) > 2 and w not in stop_words]
@@ -121,7 +126,7 @@ def get_relevant_context(query, chunks, max_chars=14000):
     scored.sort(key=lambda x: x[0], reverse=True)
     
     selected = ""
-    for _, item in scored[:12]:
+    for _, item in scored[:15]:
         entry = f"المصدر [{item['source']}]:\n{item['text']}\n\n"
         if len(selected) + len(entry) <= max_chars:
             selected += entry
@@ -187,15 +192,13 @@ body { background: #fafaf9; margin:0; padding:0; direction: rtl; text-align: rig
 <body>
 <div class="container">
 <div class="header">
-<!-- الشعار بخاصية التحميل المباشر -->
 <img src="{{ logo_src }}" alt="شعار كليات الرؤية">
 <h1>كليات الرؤية - Vision Colleges</h1>
 <h2>الاستفسار الآلي - وحدة شؤون الطلبة</h2>
-<p>مرحباً بكم في كلية الرؤية بالرياض، نرحب باستفساراتكم حول لوائح وأنظمة الكلية.</p>
+<p>مرحباً بكم في كلية الرؤية بالرياض، نرحب باستفساراتكم حول لوائح وأنظمة الكلية والأنشطة الطلابية.</p>
 </div>
 
 <div class="search-box">
-<!-- تم تعديل نص التلميح هنا ليكون بخط خفيف فقط بدون أي أمثلة -->
 <input type="text" id="q" placeholder="اكتب استفسارك هنا..." onkeypress="if(event.key==='Enter') ask()">
 <button id="btn" onclick="ask()">للرد على استفسارك اضغط هنا</button>
 <div class="loader" id="loader">جاري البحث في اللوائح والقرارات...</div>
@@ -266,7 +269,7 @@ def ask():
         if not q:
             return jsonify({"error": "يرجى كتابة السؤال"})
         if not client:
-            return jsonify({"error": "GROQ_API_KEY غير موجود في Render"})
+            return jsonify({"error": "GROQ_API_KEY غير موجود في إعدادات البيئة"})
             
         chunks = read_all_chunks()
         context = get_relevant_context(q, chunks)
@@ -279,13 +282,14 @@ def ask():
         
         prompt = f"""أنت مساعد آلي رسمي لوحدة شؤون الطلبة في كليات الرؤية بالرياض.
 
-التعليمات الهامة جداً:
-1. أجب باللغة العربية المباشرة والواضحة فقط.
-2. عند السؤال عن "الأنشطة الطلابية" لـ (شهر معين كـ أكتوبر، نوفمبر، إلخ) أو في لجنة محددة:
-   - اذكر كافة الأنشطة والفعاليات المذكورة لهذا الشهر بالكامل في النص المرجعي دون حذف أي نشاط.
-   - يمنع منعاً باتاً ذكر أي ميزانية مالية أو مبالغ بالريال السعودي نهائياً؛ اكتب الفعالية وتفاصيلها أو مكانها فقط بدون الميزانية.
-3. استخرج الإجابات بدقة من النص المرجعي المرفق.
-4. إذا لم تجد الإجابة، أجب بـ: "عذراً، لا توجد معلومات صريحة في المصادر المرفقة. يُرجى مراجعة وحدة شؤون الطلبة."
+التعليمات الهامة جداً للإجابة:
+1. عند الاستفسار عن الأنشطة الطلابية لشهر معين (مثل: شهر أكتوبر، نوفمبر، إلخ):
+   - يجب تجميع كافة الأنشطة والفعاليات المنفذة في هذا الشهر من جميع اللجان بلا استثناء (لجنة الأنشطة الطلابية والخدمة المجتمعية، لجنة التدريب الرياضي، لجنة التوعية الفكرية واللغات).
+   - اعرض الأنشطة في أقسام أو نقاط واضحة بحسب كل لجنة إن أمكن.
+   - يمنع منعاً باتاً ذكر أي ميزانيات أو مبالغ مالية أو تكاليف بالريال السعودي نهائياً؛ اذكره الفعالية وتفاصيلها فقط.
+2. أجب باللغة العربية المباشرة والدقيقة.
+3. اعتمد كلياً على النصوص والقرارات المرفقة في السياق المرجعي.
+4. في حال عدم وجود معلومات، أجب بـ: "عذراً، لا توجد معلومات صريحة في المصادر المرفقة. يُرجى مراجعة وحدة شؤون الطلبة."
 
 النص المرجعي:
 {context}
@@ -300,11 +304,11 @@ def ask():
                 completion = client.chat.completions.create(
                     model=model_name,
                     messages=[
-                        {"role": "system", "content": "أنت مساعد يجيب باللغة العربية المباشرة فقط بكل دقة."},
+                        {"role": "system", "content": "أنت مساعد يجيب باللغة العربية المباشرة والكاملة وبدقة عالية."},
                         {"role": "user", "content": prompt}
                     ],
                     temperature=0.1,
-                    max_tokens=1500
+                    max_tokens=2000
                 )
                 raw_ans = completion.choices[0].message.content.strip()
                 ans = clean_llm_response(raw_ans)
