@@ -195,7 +195,7 @@ body { background: #fafaf9; margin:0; padding:0; direction: rtl; text-align: rig
 </div>
 
 <div class="search-box">
-<!-- تم تعديل نص التلميح هنا -->
+<!-- تم تعديل نص التلميح هنا ليكون بخط خفيف فقط بدون أي أمثلة -->
 <input type="text" id="q" placeholder="اكتب استفسارك هنا..." onkeypress="if(event.key==='Enter') ask()">
 <button id="btn" onclick="ask()">للرد على استفسارك اضغط هنا</button>
 <div class="loader" id="loader">جاري البحث في اللوائح والقرارات...</div>
