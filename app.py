@@ -105,8 +105,8 @@ def read_all_chunks():
                 
     return chunks
 
-def get_relevant_context(query, chunks, max_chars=16000):
-    """استخراج أفضل النصوص المرجعية المرتبطة بسؤال الطالب"""
+def get_relevant_context(query, chunks, max_chars=8000):
+    """استخراج أفضل النصوص المرجعية المرتبطة بسؤال الطالب وحجم أصغر للحفاظ على Tokens"""
     norm_query = normalize_arabic(query)
     stop_words = ["ما", "هي", "من", "في", "على", "عن", "التي", "الذي", "ماهي", "اين", "اللجان", "الوحدات"]
     query_words = [w for w in norm_query.split() if len(w) > 2 and w not in stop_words]
@@ -126,13 +126,13 @@ def get_relevant_context(query, chunks, max_chars=16000):
     scored.sort(key=lambda x: x[0], reverse=True)
     
     selected = ""
-    for _, item in scored[:15]:
+    for _, item in scored[:8]:
         entry = f"المصدر [{item['source']}]:\n{item['text']}\n\n"
         if len(selected) + len(entry) <= max_chars:
             selected += entry
             
     if not selected and chunks:
-        selected = "\n".join([c["text"][:800] for c in chunks[:5]])
+        selected = "\n".join([c["text"][:500] for c in chunks[:3]])
         
     return selected
 
@@ -275,9 +275,9 @@ def ask():
         context = get_relevant_context(q, chunks)
         
         models_to_try = [
-            "allam-2-7b",
             "llama-3.3-70b-versatile",
-            "llama-3.1-8b-instant"
+            "allam-2-7b",
+            "llama3-70b-8192"
         ]
         
         prompt = f"""أنت مساعد آلي رسمي لوحدة شؤون الطلبة في كليات الرؤية بالرياض.
@@ -308,7 +308,7 @@ def ask():
                         {"role": "user", "content": prompt}
                     ],
                     temperature=0.1,
-                    max_tokens=2000
+                    max_tokens=1500
                 )
                 raw_ans = completion.choices[0].message.content.strip()
                 ans = clean_llm_response(raw_ans)
