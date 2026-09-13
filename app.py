@@ -46,14 +46,17 @@ def clean_llm_response(text):
     """تنظيف وتنسيق إجابة النموذج"""
     if not text:
         return ""
-    # إزالة التفكير الداخلي للنموذج إن وجد
     text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
     if "Here's" in text or "Analyze User Input" in text:
         match = re.search(r'[\u0600-\u06FF].*', text, re.DOTALL)
         if match:
             text = match.group(0)
     lines = [line for line in text.split('\n') if not re.match(r'^\s*:[A-Za-z\s]+\d*', line)]
-    return "\n".join(lines).strip()
+    unique_lines = []
+    for line in lines:
+        if not unique_lines or line.strip() != unique_lines[-1].strip():
+            unique_lines.append(line)
+    return "\n".join(unique_lines).strip()
 
 @lru_cache(maxsize=1)
 def read_all_chunks():
@@ -105,8 +108,8 @@ def read_all_chunks():
                 
     return chunks
 
-def get_relevant_context(query, chunks, max_chars=8000):
-    """استخراج أفضل النصوص المرجعية المرتبطة بسؤال الطالب وحجم أصغر للحفاظ على Tokens"""
+def get_relevant_context(query, chunks, max_chars=30000):
+    """استخراج أفضل النصوص المرجعية المرتبطة بسؤال الطالب (تم زيادة الحجم بشكل كبير)"""
     norm_query = normalize_arabic(query)
     stop_words = ["ما", "هي", "من", "في", "على", "عن", "التي", "الذي", "ماهي", "اين", "اللجان", "الوحدات"]
     query_words = [w for w in norm_query.split() if len(w) > 2 and w not in stop_words]
@@ -117,22 +120,30 @@ def get_relevant_context(query, chunks, max_chars=8000):
         norm_text = normalize_arabic(item["text"])
         for w in query_words:
             if w in norm_text:
-                score += 2
+                score += 5 # زيادة وزن الكلمة المطابقة
         if norm_query in norm_text:
-            score += 20
+            score += 30 # زيادة وزن التطابق الدقيق
+        # إذا كان السؤال يحتوي على اسم علم (كلمة تبدأ بـ "د." أو "أ." أو اسم شخص)
+        if any(name_part in query for name_part in ["د.", "أ.", "الدكتور", "الأستاذ", "دكتور", "استاذ"]):
+            # البحث عن مطابقة دقيقة لأسماء الأشخاص في النص
+            name_matches = re.findall(r'(?:د\.|أ\.)\s*[\u0600-\u06FF]+(?:\s+[\u0600-\u06FF]+)*', query)
+            for match in name_matches:
+                if match in item["text"]:
+                    score += 50 # إعطاء أولوية قصوى لأسماء الأشخاص
         if score > 0:
             scored.append((score, item))
             
     scored.sort(key=lambda x: x[0], reverse=True)
     
     selected = ""
-    for _, item in scored[:8]:
+    # زيادة عدد الأجزاء المستخرجة لضمان شمولية المعلومات
+    for _, item in scored[:20]:
         entry = f"المصدر [{item['source']}]:\n{item['text']}\n\n"
         if len(selected) + len(entry) <= max_chars:
             selected += entry
             
     if not selected and chunks:
-        selected = "\n".join([c["text"][:500] for c in chunks[:3]])
+        selected = "\n".join([c["text"][:1000] for c in chunks[:5]])
         
     return selected
 
@@ -163,11 +174,11 @@ body { background: #fafaf9; margin:0; padding:0; direction: rtl; text-align: rig
 .disclaimer-box { 
     background-color: #f4f4f6; 
     color: #222; 
-    padding: 20px; 
+    padding: 15px; 
     border-radius: 10px; 
     margin-top: 30px; 
-    font-size: 13px; 
-    line-height: 1.7; 
+    font-size: 12px; 
+    line-height: 1.6; 
     text-align: right;
     border-right: 5px solid #8C7355;
 }
@@ -272,7 +283,7 @@ def ask():
             return jsonify({"error": "GROQ_API_KEY غير موجود في إعدادات البيئة"})
             
         chunks = read_all_chunks()
-        context = get_relevant_context(q, chunks)
+        context = get_relevant_context(q, chunks, max_chars=30000) # زيادة حجم السياق
         
         models_to_try = [
             "llama-3.3-70b-versatile",
@@ -283,13 +294,15 @@ def ask():
         prompt = f"""أنت مساعد آلي رسمي لوحدة شؤون الطلبة في كليات الرؤية بالرياض.
 
 التعليمات الهامة جداً للإجابة:
-1. عند الاستفسار عن الأنشطة الطلابية لشهر معين (مثل: شهر أكتوبر، نوفمبر، إلخ):
-   - يجب تجميع كافة الأنشطة والفعاليات المنفذة في هذا الشهر من جميع اللجان بلا استثناء (لجنة الأنشطة الطلابية والخدمة المجتمعية، لجنة التدريب الرياضي، لجنة التوعية الفكرية واللغات).
-   - اعرض الأنشطة في أقسام أو نقاط واضحة بحسب كل لجنة إن أمكن.
-   - يمنع منعاً باتاً ذكر أي ميزانيات أو مبالغ مالية أو تكاليف بالريال السعودي نهائياً؛ اذكره الفعالية وتفاصيلها فقط.
-2. أجب باللغة العربية المباشرة والدقيقة.
-3. اعتمد كلياً على النصوص والقرارات المرفقة في السياق المرجعي.
-4. في حال عدم وجود معلومات، أجب بـ: "عذراً، لا توجد معلومات صريحة في المصادر المرفقة. يُرجى مراجعة وحدة شؤون الطلبة."
+1. أجب باللغة العربية المباشرة والواضحة فقط، وبإيجاز.
+2. اعتمد كلياً على النصوص والقرارات المرفقة في السياق المرجعي.
+3. عند الاستفسار عن اسم شخص (مثل: "د. أحمد مرسي" أو "أ. ملاذ") أو عن لجانه أو وحداته:
+   - يجب عليك البحث عن هذا الاسم في **كافة أجزاء السياق المرجعي** المرفق.
+   - ثم قم بجمع **كل** اللجان أو الوحدات التي ورد فيها هذا الاسم (مثل: لجنة الأعذار، وحدة البحث العلمي، لجنة الاختبارات، إلخ) واذكرها في قائمة واضحة.
+   - لا تكتفِ بذكر لجنة واحدة فقط، بل اذكر جميع اللجان التي تم العثور عليها.
+4. عند الاستفسار عن الأنشطة الطلابية لشهر معين، يجب تجميع كافة الأنشطة من جميع اللجان. ويمنع منعاً باتاً ذكر أي ميزانيات أو مبالغ مالية.
+5. لا تكرر إجابتك، واكتبها مرة واحدة فقط في نهاية الرد.
+6. إذا لم تجد الإجابة في النص المرجعي، أجب بـ: "عذراً، لا توجد معلومات صريحة في المصادر المرفقة. يُرجى مراجعة وحدة شؤون الطلبة."
 
 النص المرجعي:
 {context}
@@ -304,7 +317,7 @@ def ask():
                 completion = client.chat.completions.create(
                     model=model_name,
                     messages=[
-                        {"role": "system", "content": "أنت مساعد يجيب باللغة العربية المباشرة والكاملة وبدقة عالية."},
+                        {"role": "system", "content": "أنت مساعد دقيق يجيب باللغة العربية المباشرة. لا تكرر الإجابة. ابحث عن الأسماء في كل النص."},
                         {"role": "user", "content": prompt}
                     ],
                     temperature=0.1,
