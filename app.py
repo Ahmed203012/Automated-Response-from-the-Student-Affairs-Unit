@@ -8,7 +8,7 @@ from docx import Document
 import pandas as pd
 from groq import Groq
 
-# استيراد البيانات الثابتة من قاعدة المعرفة
+# --- استيراد ملف البيانات الثابتة ---
 try:
     from knowledge_base import HARDCODED_DATA
 except ImportError:
@@ -16,12 +16,12 @@ except ImportError:
 
 app = Flask(__name__)
 
-# إعداد العميل لخدمة Groq API
+# إعداد Groq Client
 api_key = os.environ.get("GROQ_API_KEY")
 client = Groq(api_key=api_key) if api_key else None
 
 def get_logo_base64():
-    """تحويل صورة الشعار إلى Base64 للعرض المباشر"""
+    """تحويل صورة اللوجو إلى Base64 لضمان ظهورها دائماً دون مشاكل مسارات"""
     for fname in ["logo.png", "logo.jpg", "logo.jpeg"]:
         if os.path.exists(fname):
             try:
@@ -34,7 +34,6 @@ def get_logo_base64():
     return "logo.png"
 
 def normalize_arabic(text):
-    """توحيد وتنظيف النصوص العربية للبحث"""
     if not text:
         return ""
     text = str(text)
@@ -43,7 +42,6 @@ def normalize_arabic(text):
     return text.lower().strip()
 
 def clean_llm_response(text):
-    """تنظيف وتنسيق إجابة النموذج ومنع التكرار"""
     if not text:
         return ""
     text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
@@ -52,17 +50,10 @@ def clean_llm_response(text):
         if match:
             text = match.group(0)
     lines = [line for line in text.split('\n') if not re.match(r'^\s*:[A-Za-z\s]+\d*', line)]
-    
-    unique_lines = []
-    for line in lines:
-        if not unique_lines or line.strip() != unique_lines[-1].strip():
-            unique_lines.append(line)
-            
-    return "\n".join(unique_lines).strip()
+    return "\n".join(lines).strip()
 
 @lru_cache(maxsize=1)
 def read_all_chunks():
-    """قراءة وتحميل جميع النصوص من الملف الثابت والمستندات المحلية"""
     chunks = list(HARDCODED_DATA)
     
     for file in os.listdir("."):
@@ -79,15 +70,15 @@ def read_all_chunks():
                     try:
                         text = page.get_text("text")
                         if text and len(text.strip()) > 20:
-                            chunks.append({"source": f"{file} (ص {i+1})", "text": text[:2500]})
+                            chunks.append({"source": f"{file} (ص {i+1})", "text": text[:3000]})
                     except:
                         continue
                 doc.close()
             elif low.endswith(".docx"):
                 doc = Document(file)
-                txt = "\n".join([p.text for p in doc.paragraphs if p.text.strip()][:100])
+                txt = "\n".join([p.text for p in doc.paragraphs if p.text.strip()][:150])
                 if txt:
-                    chunks.append({"source": file, "text": txt[:2500]})
+                    chunks.append({"source": file, "text": txt[:3000]})
             elif low.endswith((".xlsx", ".xls")):
                 excel_file = pd.ExcelFile(file)
                 for sheet in excel_file.sheet_names:
@@ -103,15 +94,14 @@ def read_all_chunks():
                 with open(file, 'r', encoding='utf-8') as f:
                     txt = f.read()
                     if txt and len(txt.strip()) > 20:
-                        chunks.append({"source": file, "text": txt[:2500]})
+                        chunks.append({"source": file, "text": txt[:3000]})
         except Exception as file_err:
             print(f"Error reading file {file}: {file_err}")
             continue
                 
     return chunks
 
-def get_relevant_context(query, chunks, max_chars=6000):
-    """استخراج أفضل النصوص المرجعية المرتبطة بسؤال الطالب"""
+def get_relevant_context(query, chunks, max_chars=14000):
     norm_query = normalize_arabic(query)
     stop_words = ["ما", "هي", "من", "في", "على", "عن", "التي", "الذي", "ماهي", "اين", "اللجان", "الوحدات"]
     query_words = [w for w in norm_query.split() if len(w) > 2 and w not in stop_words]
@@ -122,34 +112,22 @@ def get_relevant_context(query, chunks, max_chars=6000):
         norm_text = normalize_arabic(item["text"])
         for w in query_words:
             if w in norm_text:
-                score += 5
+                score += 2
         if norm_query in norm_text:
-            score += 30
-            
-        # إعطاء أولوية عالية جداً للأسئلة المتعلقة بالمناصب الإدارية
-        admin_keywords = ["عميد", "وكيل", "رئيس", "مدير", "من هو"]
-        if any(kw in query for kw in admin_keywords):
-            if any(kw in item["text"] for kw in admin_keywords):
-                score += 100
-                
-        if any(name_part in query for name_part in ["د.", "أ.", "الدكتور", "الأستاذ", "دكتور", "استاذ"]):
-            name_matches = re.findall(r'(?:د\.|أ\.)\s*[\u0600-\u06FF]+(?:\s+[\u0600-\u06FF]+)*', query)
-            for match in name_matches:
-                if match in item["text"]:
-                    score += 50
+            score += 20
         if score > 0:
             scored.append((score, item))
             
     scored.sort(key=lambda x: x[0], reverse=True)
     
     selected = ""
-    for _, item in scored[:10]:
+    for _, item in scored[:12]:
         entry = f"المصدر [{item['source']}]:\n{item['text']}\n\n"
         if len(selected) + len(entry) <= max_chars:
             selected += entry
             
     if not selected and chunks:
-        selected = "\n".join([c["text"][:500] for c in chunks[:3]])
+        selected = "\n".join([c["text"][:800] for c in chunks[:5]])
         
     return selected
 
@@ -180,11 +158,11 @@ body { background: #fafaf9; margin:0; padding:0; direction: rtl; text-align: rig
 .disclaimer-box { 
     background-color: #f4f4f6; 
     color: #222; 
-    padding: 15px; 
+    padding: 20px; 
     border-radius: 10px; 
     margin-top: 30px; 
-    font-size: 12px; 
-    line-height: 1.6; 
+    font-size: 13px; 
+    line-height: 1.7; 
     text-align: right;
     border-right: 5px solid #8C7355;
 }
@@ -209,13 +187,15 @@ body { background: #fafaf9; margin:0; padding:0; direction: rtl; text-align: rig
 <body>
 <div class="container">
 <div class="header">
+<!-- الشعار بخاصية التحميل المباشر -->
 <img src="{{ logo_src }}" alt="شعار كليات الرؤية">
 <h1>كليات الرؤية - Vision Colleges</h1>
 <h2>الاستفسار الآلي - وحدة شؤون الطلبة</h2>
-<p>مرحباً بكم في كلية الرؤية بالرياض، نرحب باستفساراتكم حول لوائح وأنظمة الكلية والأنشطة الطلابية.</p>
+<p>مرحباً بكم في كلية الرؤية بالرياض، نرحب باستفساراتكم حول لوائح وأنظمة الكلية.</p>
 </div>
 
 <div class="search-box">
+<!-- تم تعديل نص التلميح هنا ليكون بخط خفيف فقط بدون أي أمثلة -->
 <input type="text" id="q" placeholder="اكتب استفسارك هنا..." onkeypress="if(event.key==='Enter') ask()">
 <button id="btn" onclick="ask()">للرد على استفسارك اضغط هنا</button>
 <div class="loader" id="loader">جاري البحث في اللوائح والقرارات...</div>
@@ -286,31 +266,26 @@ def ask():
         if not q:
             return jsonify({"error": "يرجى كتابة السؤال"})
         if not client:
-            return jsonify({"error": "GROQ_API_KEY غير موجود في إعدادات البيئة"})
+            return jsonify({"error": "GROQ_API_KEY غير موجود في Render"})
             
         chunks = read_all_chunks()
-        context = get_relevant_context(q, chunks, max_chars=6000)
+        context = get_relevant_context(q, chunks)
         
-        # ترتيب النماذج: نضع groq/compound أولاً لأنه الأفضل في الالتزام بالتعليمات
         models_to_try = [
-            "groq/compound",
-            "openai/gpt-oss-120b",
-            "allam-2-7b"
+            "llama-3.3-70b-versatile",
+            "mixtral-8x7b-32768",
+            "openai/gpt-oss-120b"
         ]
         
         prompt = f"""أنت مساعد آلي رسمي لوحدة شؤون الطلبة في كليات الرؤية بالرياض.
 
-التعليمات الصارمة للإجابة:
-1. أجب باللغة العربية المباشرة والواضحة فقط، وبإيجاز.
-2. اعتمد كلياً على النصوص والقرارات المرفقة في السياق المرجعي.
-3. **ممنوع تماماً:** اختلاق أسماء أو مناصب غير موجودة في النص المرجعي.
-4. إذا سُئلت عن منصب إداري (مثل: من هو العميد؟) وكان الاسم موجوداً في النص المرجعي، اذكر الاسم بدقة كما هو مكتوب.
-5. إذا لم تجد الاسم في النص المرجعي، أجب فقط بـ: "لا توجد معلومات محددة في المصادر المرفقة. يُرجى مراجعة وحدة شؤون الطلبة."
-6. عند الاستفسار عن اسم شخص (مثل: "د. أحمد مرسي" أو "أ. ملاذ"):
-   - ابحث عن هذا الاسم في كافة أجزاء السياق المرجعي.
-   - ثم اذكر كل اللجان أو الوحدات التي ورد فيها هذا الاسم في قائمة واضحة.
-7. **ممنوع تماماً:** تكرار نفس الجملة أو الفقرة أكثر من مرة واحدة.
-8. عند الاستفسار عن الأنشطة الطلابية لشهر معين، يجب تجميع كافة الأنشطة من جميع اللجان. ويمنع منعاً باتاً ذكر أي ميزانيات أو مبالغ مالية.
+التعليمات الهامة جداً:
+1. أجب باللغة العربية المباشرة والواضحة فقط.
+2. عند السؤال عن "الأنشطة الطلابية" لـ (شهر معين كـ أكتوبر، نوفمبر، إلخ) أو في لجنة محددة:
+   - اذكر كافة الأنشطة والفعاليات المذكورة لهذا الشهر بالكامل في النص المرجعي دون حذف أي نشاط.
+   - يمنع منعاً باتاً ذكر أي ميزانية مالية أو مبالغ بالريال السعودي نهائياً؛ اكتب الفعالية وتفاصيلها أو مكانها فقط بدون الميزانية.
+3. استخرج الإجابات بدقة من النص المرجعي المرفق.
+4. إذا لم تجد الإجابة، أجب بـ: "عذراً، لا توجد معلومات صريحة في المصادر المرفقة. يُرجى مراجعة وحدة شؤون الطلبة."
 
 النص المرجعي:
 {context}
@@ -325,11 +300,11 @@ def ask():
                 completion = client.chat.completions.create(
                     model=model_name,
                     messages=[
-                        {"role": "system", "content": "أنت مساعد دقيق يجيب باللغة العربية المباشرة. ممنوع اختلاق المعلومات. لا تكرر الإجابة."},
+                        {"role": "system", "content": "أنت مساعد يجيب باللغة العربية المباشرة فقط بكل دقة."},
                         {"role": "user", "content": prompt}
                     ],
-                    temperature=0.0,
-                    max_tokens=1200
+                    temperature=0.1,
+                    max_tokens=1500
                 )
                 raw_ans = completion.choices[0].message.content.strip()
                 ans = clean_llm_response(raw_ans)
