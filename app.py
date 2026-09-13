@@ -277,7 +277,7 @@ def ask():
         models_to_try = [
             "allam-2-7b",
             "llama-3.3-70b-versatile",
-            "llama3-8b-8192"
+            "llama-3.1-8b-instant"
         ]
         
         prompt = f"""أنت مساعد آلي رسمي لوحدة شؤون الطلبة في كليات الرؤية بالرياض.
